@@ -1,0 +1,143 @@
+local ToolInstance=CS.ToolManagerLuaInterface
+local PTable = CS.ConfigurationMenuValidationLuaInterface.Instance.parameterTable
+local ValidationInterfaceInstance = CS.ConfigurationMenuValidationLuaInterface.Instance
+local FlowBlockMenuLuaInterface = CS.FlowBlockMenuLuaInterface;
+
+local Existing_step_id={}
+
+local collectionOfStepsWithMissingToolOrTCP = {}
+local collectionOfStepsWithMissingTCP = {}
+local projectToolIdCollection = {}
+local projectToolNameCollection = {}
+local projectTcpIdCollection = {}
+local result_ForceWriteParameterTableToFile
+
+function GetToolName(_toolId)
+    local _thisToolName = ""
+    for index_toolId, toolIdElement in pairs(projectToolIdCollection) do
+        if (toolIdElement == _toolId) then
+            _thisToolName = projectToolNameCollection[index_toolId]
+        break
+		end
+    end
+    return _thisToolName
+end
+
+function SetValidationResult()
+    if(result_ForceWriteParameterTableToFile) then
+        ValidationInterfaceInstance:SetResultWritePTable(true)
+    end
+    ValidationInterfaceInstance:SetResultValidation(result_ForceWriteParameterTableToFile)
+end
+
+function ReassignToolAndTCP()
+    if(#collectionOfStepsWithMissingToolOrTCP > 0) then
+        for index,thisStepId in pairs(collectionOfStepsWithMissingToolOrTCP) do
+            print(index .. ' ==> ' .. thisStepId)
+            PTable:set_Item('projectToolSelected_ID'..thisStepId, projectToolIdCollection[1])
+            PTable:set_Item('projectTcpSelected_ID'..thisStepId, ToolInstance.GetProjectToolTcps(GetToolName(projectToolIdCollection[1]))[0])
+        end
+    end
+
+    if(#collectionOfStepsWithMissingTCP > 0) then
+        for index,thisStepId in pairs(collectionOfStepsWithMissingTCP) do
+            print(index .. ' ==> ' .. thisStepId)
+            local thisStepToolid = PTable:get_Item('projectToolSelected_ID'..thisStepId)
+            PTable:set_Item('projectTcpSelected_ID'..thisStepId, ToolInstance.GetProjectToolTcps(GetToolName(thisStepToolid))[0])
+        end
+    end
+    result_ForceWriteParameterTableToFile = ValidationInterfaceInstance:ForceWriteParameterTableToFile(SetValidationResult)
+end
+
+local function XXX(table_save)                      --Transform Lua Table into string seperated by ","
+    return table.concat(table_save,',')
+end 
+
+local function XXXX(table_save)                       --Transform string seperated by "," into Lua Table
+    local datas={}
+    local n=1
+
+    if #file_read==0 then
+        return {}
+    end
+    for data in file_read:gmatch('[^,%s]+') do
+        datas[n]=data
+        n=n+1
+    end
+
+    return datas
+end
+
+if PTable:ContainsKey("Existing_step_id")==false then                                           --Read existing_step_id or initialize
+    PTable:set_Item("Existing_step_id",TableSaveToFileformate(Existing_step_id))                
+else 
+    Existing_step_id=FileReadToTableformate(PTable:get_Item("Existing_step_id"))
+end
+
+--===========================Validation==============================================================================
+
+ValidationInterfaceInstance:WaitForValidation();
+
+--===========================Check Tool==============================================================================
+local FlowBlock = CS.FlowBlockMenuLuaInterface;
+local allProjectTools = ToolInstance.GetProjectTools()
+local allGlobalTools = ToolInstance.GetGlobalTools()
+local isFound = false
+if(allProjectTools == nil or tablelength(allProjectTools) < 1) then
+	FlowBlock.ShowPopWindow("Tool missing.", "Please check project tool panel and assign. (0)", "Confirm", nil)
+else
+	for i,d in pairs(allGlobalTools) do
+		if(allProjectTools[0].id == d.id) then
+			isFound = true
+		end
+	end
+	if(not isFound) then
+		FlowBlock.ShowPopWindow("Tool missing.", "Please check project tool panel and assign. (1)", "Confirm", nil)
+	end
+end
+
+if (isFound) then
+
+    for index,j in pairs(ToolInstance.GetProjectTools()) do
+        table.insert(projectToolIdCollection, j.id)
+        table.insert(projectToolNameCollection, j.name)
+    end
+
+    for step_i = 1, #Existing_step_id do 
+        local thisStepId = Existing_step_id[step_i]
+        local thisToolId = PTable:get_Item('projectToolSelected_ID'..thisStepId)
+        local thisToolName
+
+        if not (tableContainsValue(projectToolIdCollection,thisToolId)) then
+            table.insert(collectionOfStepsWithMissingToolOrTCP,thisStepId) 
+        else
+
+            thisToolName = GetToolName(thisToolId)
+
+            projectTcpIdCollection = {}
+            for index,j in pairs(ToolInstance.GetProjectToolTcps(thisToolName)) do
+                table.insert(projectTcpIdCollection, j)
+            end
+
+            local thisTcpId = PTable:get_Item('projectTcpSelected_ID'..thisStepId)
+            if not (tableContainsValue(projectTcpIdCollection,thisTcpId)) then
+                table.insert(collectionOfStepsWithMissingTCP,thisStepId) 
+            end
+        end
+    end
+    if(#collectionOfStepsWithMissingToolOrTCP > 0 or #collectionOfStepsWithMissingTCP > 0) then
+        local popContent = 'Cannot find the tool assigned in this flow block.\r\n Try to replace it with the project tool.'
+        FlowBlockMenuLuaInterface.ShowPopWindow("Auto-correction",popContent,"Confirm",ReassignToolAndTCP)
+    else
+        ValidationInterfaceInstance:SetResultWritePTable(false)
+        ValidationInterfaceInstance:SetResultValidation(true)
+    end
+	
+else
+    ValidationInterfaceInstance:SetResultWritePTable(false)
+    ValidationInterfaceInstance:SetResultValidation(false)
+end
+
+--=================================================================================================================
+
+print("<Color=red>Validation check end</color>")

@@ -1,0 +1,24 @@
+{
+  "titleOfPage": "What move motion you want to perform?",
+  "uiGroups": [
+    {
+      "name": null,
+      "groupTitle": null,
+      "uiElements": [
+        {
+          "name":"motion_page",
+          "elementType": "SubMenuLink",
+          "elementDefinition": {
+            "title": "Motion Setting",
+            "linkIndex": 0,
+            "isSelected": true,
+            "layoutSetting": null,
+            "name": null,
+            "uiElementType": "SubMenuLink"
+          }
+        }
+
+      ]
+    }
+  ]
+}

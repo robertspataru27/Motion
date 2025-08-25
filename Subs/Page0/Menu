@@ -1,0 +1,198 @@
+{
+  "titleOfPage": "Motion Configuration",
+  "uiGroups": [
+    {
+      "name": "StepsListPage",
+      "groupTitle": null,
+      "uiElements": [
+        {
+          "name": "StepsList",
+          "elementType": "List",
+          "elementDefinition": {
+            "title": null,
+            "listElementTemplate": [
+              {
+                "name": "Step_edit",
+                "elementType": "Button",
+                "elementDefinition": {
+                  "value": "edit",
+                  "title": "Step"
+                }
+              },
+              {
+                "name": "StepListSortOrder",
+                "elementType": "SortOrderButton",
+                "elementDefinition": {
+                  "title": null,
+                  "layoutSetting":{}
+                }
+              }
+            ],
+            "defaultListCount": 0,
+            "isScrollable": true,
+            "isEditable": true,
+            "maxItemVisible": 2,
+            "value": null,
+            "layoutSetting": {
+              "isHorizontal": false,
+              "titleMultiLine": false
+            }
+          }
+        },
+        {
+          "name": "StepName",
+          "elementType": "Text_Input",
+          "elementDefinition": {
+            "title": "Name",
+            "value": "",
+            "layoutSetting": null
+          }
+        },
+        {
+          "name":"TargetType",
+          "elementType":"Dropdown",
+          "elementDefinition":{
+          "title":"Target Type",
+          "value":0,
+          "dropdownElementList": [
+            "Transform",
+            "Joint"
+          ]
+          },
+          "layoutSetting": null
+        },
+        {
+          "name": "ToolChoice",
+          "elementType": "Dropdown",
+          "elementDefinition": {
+            "title": "Tool Setting",
+            "dropdownElementList": [
+  
+              
+            ],
+            "value":0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "TcpChoice",
+          "elementType": "Dropdown",
+          "elementDefinition": {
+            "title": "Tcp Setting",
+            "dropdownElementList": [
+             
+
+              
+            ],
+            "value":0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "StepRobotJoint",
+          "elementType": "Joint",
+          "elementDefinition": {
+            "title": "Robot Joint",
+            "value": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "offsetValue": [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            "layoutSetting": null
+          }
+          
+        },
+        {
+          "name": "StepTransform",
+          "elementType": "TCPTransform",
+          "elementDefinition": {
+            "title": "TCP Transform",
+            "value": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "offsetValue": [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "HoldToRun",
+          "elementType": "Button",
+          "elementDefinition": {
+            "value": "GO",
+            "title": "PTP Move to point"
+          }
+        },
+        {
+          "name": "TrajectoryMotionType",
+          "elementType": "Dropdown",
+          "elementDefinition": {
+            "title": "Motion Type",
+            "dropdownElementList": [
+              "FREE",
+              "PTP",
+              "LINE",
+              "ARC"
+            ],
+            "value":1,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "ARCTransform",
+          "elementType": "TCPTransform",
+          "elementDefinition": {
+            "title": "TCP Transform",
+            "value": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "offsetValue": [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "MotionSetting",
+          "elementType": "Button",
+          "elementDefinition": {
+            "value": "edit",
+            "title": "Step Setting:"
+          }
+        }
+      ]
+    }
+  ]
+}

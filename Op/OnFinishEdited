@@ -1,0 +1,89 @@
+-- On Edit
+CS.UnityEngine.Debug.Log('Move > SubPage0 OnFinishEdited triggered')
+local Instance = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance
+local PTable = Instance.parameterTable
+local UiElement = Instance.uiElementOnEdit
+
+local UiElementType = Instance.typeOfUiElementOnEdit
+--  UiElementType = Instance.uiElementOnEdit:uiElementType <- The same as above
+--  UiElementType = Instance.uiElementOnEdit:GetType().Name <- The same as above
+
+
+-- Verify PTable is setup
+PTable:set_Item('Vender', 'Mantis Robotics Inc')
+if(UiElement.name ~= nil) then
+	ui_name=UiElement.name
+else
+	ui_name = "Unkown"
+end
+CS.UnityEngine.Debug.Log(ui_name)
+
+
+tag_name=UiElementType..'_'..ui_name..'_values'
+CS.UnityEngine.Debug.Log(tag_name)
+
+
+-- [CheckBox] [Text Display] [Text Input] [Int Input]
+if (UiElementType == "CheckBox") or 
+     (UiElementType == "Text_Display") or 
+       (UiElementType == "Text_Input") or  
+         (UiElementType == "Float_Input") or  
+           (UiElementType == "Int_Input") or
+		     (UiElementType == "Digital_Output") or 
+			   (UiElementType == "Digital_Input") or
+			     (UiElementType == "Dropdown") then
+	PTable:set_Item(tag_name, UiElement.value) --save to PTable
+	
+-- [Transform] [Joint]
+elseif (UiElementType == "Transform") or 
+     (UiElementType == "Joint") then 
+	current_values={}
+	current_offsetValues={}
+	for i=1,6 do
+		current_values[i]=UiElement.value[i-1] --write data to temp array
+		current_offsetValues[i] = UiElement.offsetValue[i-1] --write data to temp array
+	end
+	commaSeperatedValues = table.concat(current_values, ', ')
+	commaSeperatedOffsetValues = table.concat(current_offsetValues, ', ')
+	PTable:set_Item(tag_name, commaSeperatedValues)
+	PTable:set_Item(tag_name .. '_offsetValues', commaSeperatedOffsetValues)
+	
+-- Project Tool
+elseif (UiElementType == "ProjectTool") then
+	current_values={}
+	current_offsetValues={}
+	for i=1,6 do
+		current_values[i]=UiElement.value.transform[i-1] --write data to temp array
+		current_offsetValues[i] = UiElement.value.offsetValue[i-1] --write data to temp array
+	end
+	commaSeperatedValues = table.concat(current_values, ', ')
+	commaSeperatedOffsetValues = table.concat(current_offsetValues, ', ')
+	
+	PTable:set_Item(tag_name..'_transform', commaSeperatedValues) --save to PTable
+	PTable:set_Item(tag_name .. '_offsetValues', commaSeperatedOffsetValues)
+    PTable:set_Item(tag_name..'_toolName', UiElement.value.toolName)
+	PTable:set_Item(tag_name..'_tcpNumber', UiElement.value.tcpNumber)
+	
+
+-- [TODO] Add List Type (List<List<ConfigurationMenuUiElement>> value)
+elseif (UiElementType == "List") then
+	PTable:set_Item(tag_name, UiElement.value)
+	-- error("type: " .. type(UiElement)) --> userData
+	-- error("type: " .. type(UiElement.value)) --> userData
+	-- for keyLayer1, subList in pairs(UiElement.value) do --> list<>
+		-- error("type: " .. type(mainList))	--> userData  (https://www.lua.org/pil/28.1.html)
+		-- for keyLayer2, element in pairs(subList) do 
+			-- error("Console>> " .. element.value)
+			-- error("Console>> " .. element:GetType().Name)
+			-- element:GetType().Name
+			-- PTableKey = tag_name .. "_" .. keyLayer1 .. '_' .. keyLayer2 .. '_value' 
+			-- CS.UnityEngine.Debug.Log("Console>> " .. PTableKey)
+		-- end
+		-- subTagName = tag_name .. '[' .. key1 .. '][' ..key2..']'
+		-- PTable:set_Item(subTagName, uiSubElement.value)
+	-- end
+
+else
+	CS.UnityEngine.Debug.Log('Type not yet configured (OnEdit): ' .. UiElementType)
+	--error("Unsetting type")
+end

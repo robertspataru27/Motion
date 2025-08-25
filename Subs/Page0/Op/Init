@@ -1,0 +1,628 @@
+
+CS.UnityEngine.Debug.Log('Motion > Sub > Page0 > Op > Init triggered')
+
+local PTable = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance.parameterTable
+--============================Check Deck===================================================================================
+local FlowBlock = CS.FlowBlockMenuLuaInterface;
+local AllDecksInfo = FlowBlock.GetAllDeckObjectInfo()
+function CheckDeck()
+	local check = true
+	for key, deck in pairs(AllDecksInfo) do
+		if deck.ObjectName == nil then
+			local popContent = string.format("Assign %s to the Deck first.", tostring(deck.ProcessType))
+			FlowBlock.ShowPopWindow("Warning", popContent, "Confirm", FlowBlock.SwitchToFlowView())
+			check = false
+		else
+			if deck.IsOnCellTable == false then
+				if deck.ProcessType ~= "WorkforceRobot" then
+					local popContent
+					local name = ""
+					if deck.DisplayName == "" then
+						if deck.ProcessType == "WorkforceRobot" then
+							name = deck.ObjectName
+						elseif deck.ProcessType == "WorkforceHuman" then
+							name = "Human_" .. deck.ObjectName:sub(#deck.ObjectName - 3, #deck.ObjectName)
+						end
+					else
+						name = deck.DisplayName
+					end
+					popContent = string.format("Put the assigned %s to CELL's workspace first.", name)
+					FlowBlock.ShowPopWindow("Warning", popContent, "Confirm", FlowBlock.SwitchToCellView())
+					check = false
+				end
+			end
+		end
+	end
+	return check
+end
+
+if AllDecksInfo ~= nil then
+	CheckDeck()
+end
+
+local allProjectTools = CS.ToolManagerLuaInterface.GetProjectTools()
+local allGlobalTools = CS.ToolManagerLuaInterface.GetGlobalTools()
+if(allProjectTools == nil or tablelength(allProjectTools) < 1) then
+	FlowBlock.ShowPopWindow("Tool missing.", "Please check project tool panel and assign.", "Confirm", FlowBlock.SwitchToCellView())
+else
+	local isFound = false
+	for i,d in pairs(allGlobalTools) do
+		if(allProjectTools[0].id == d.id) then
+			isFound = true
+		end
+	end
+	if(not isFound) then
+		FlowBlock.ShowPopWindow("Tool missing.", "Please check project tool panel and assign.", "Confirm", FlowBlock.SwitchToCellView())
+	end
+end
+
+--=================================================================================================================
+
+
+
+local PTable = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance.parameterTable
+local Instance = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance
+local UIPage = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance.uiPageOnEdit
+local ToolInstance = CS.ToolManagerLuaInterface
+local RobotController = CS.RobotControllerLuaInterface
+
+-------------------------------Used for this page--------------------------------------------
+-- local SpeedMmUI = Instance:GetUiElementByName('SpeedMm')
+-- local SpeedPercUI = Instance:GetUiElementByName('SpeedPerc')
+-- local CollisionMarginUI = Instance:GetUiElementByName('CollisionMargin')
+-- local StepSizeUI = Instance:GetUiElementByName('StepSize')
+local TrajectoryMotionTypeUI = Instance:GetUiElementByName('TrajectoryMotionType')
+local StepNameUI = Instance:GetUiElementByName('StepName')
+-- local BlendsEnableUI = Instance:GetUiElementByName("BlendsEnable")
+-- local DelayTimeUI = Instance:GetUiElementByName("DelaytimeBetweenPandC")
+-- local BlendsRadiusUI = Instance:GetUiElementByName("BlendsRadius")
+local StepsListUI = Instance:GetUiElementByName("StepsList")
+local TargetTypeUI = Instance:GetUiElementByName("TargetType")
+local StepTransformUI = Instance:GetUiElementByName("StepTransform")
+local ARCTransformUI = Instance:GetUiElementByName("ARCTransform")
+local StepRobotJointUI = Instance:GetUiElementByName("StepRobotJoint")
+local ToolChoiceUI = Instance:GetUiElementByName("ToolChoice")
+local TcpChoiceUI = Instance:GetUiElementByName("TcpChoice")
+-- local ConditionSelectionUI = Instance:GetUiElementByName('ConditionSelection')
+-- local ProcedureSelectionUI = Instance:GetUiElementByName('ProcedureSelection')
+local HoldToRunUI = Instance:GetUiElementByName('HoldToRun')
+local MotionSettingUI = Instance:GetUiElementByName('MotionSetting')
+-------------------------------Used for tool information--------------------------------------------
+local projectToolDic = {}
+local projectToolName = {}
+local projectToolTcp = {}
+local trigger_button_color = {}
+local default_button_color = {}
+local Existing_step_id = {}
+local current_step_id = '0'
+local previous_step_id = '0'
+trigger_button_color[1] = 0.2
+trigger_button_color[2] = 0.4
+trigger_button_color[3] = 0.3
+default_button_color[1] = 0
+default_button_color[2] = 0.2
+default_button_color[3] = 0.6
+local motionType={}
+local motionTypeDefault={'FREE','PTP','LINE', 'ARC'}
+local motionTypeJointDefault={'FREE','PTP'}
+--UIPage:Set3DGizmoRootTransform({0,0,0,0,0,0})
+
+
+
+
+local function ToJsonString(jsonStr)
+	local index = string.find(jsonStr, ':[^:]*$')
+	return string.sub(jsonStr, 1, index - 1)
+end
+
+-- Verify PTable is setup (using dummy parameter)
+PTable:set_Item('Vender', 'Mantis Robotics Inc')
+vendor = PTable:get_Item('Vender')
+CS.UnityEngine.Debug.Log(vendor)
+
+
+
+
+local function XXX(table_save) --Transform Lua Table into string seperated by ","
+	return table.concat(table_save, ',')
+end
+local function XXXX(table_save) --Transform string seperated by "," into Lua Table
+	local datas = {}
+	local n = 1
+
+	if #file_read == 0 then
+		return {}
+	end
+	for data in file_read:gmatch('[^,%s]+') do
+		datas[n] = data
+		n = n + 1
+	end
+
+	return datas
+end
+
+function HoldToRunToTransform()
+	if TargetTypeUI.value == 0 then --transform
+
+		local offsetValue_0 = FlowBlock.GetFieldValue(StepTransformUI.offsetValue[0])
+		local offsetValue_1 = FlowBlock.GetFieldValue(StepTransformUI.offsetValue[1])
+		local offsetValue_2 = FlowBlock.GetFieldValue(StepTransformUI.offsetValue[2])
+		local offsetValue_3 = FlowBlock.GetFieldValue(StepTransformUI.offsetValue[3])
+		local offsetValue_4 = FlowBlock.GetFieldValue(StepTransformUI.offsetValue[4])
+		local offsetValue_5 = FlowBlock.GetFieldValue(StepTransformUI.offsetValue[5])
+		local cartPos = { StepTransformUI.value[0] + offsetValue_0, StepTransformUI.value[1] + offsetValue_1, StepTransformUI.value[2] + offsetValue_2,
+		StepTransformUI.value[3] + offsetValue_3, StepTransformUI.value[4] + offsetValue_4, StepTransformUI.value[5] + offsetValue_5 }
+		RobotController.SetCurrentToolBeforeHoldToRun(ToolChoiceUI.value,TcpChoiceUI.value,cartPos)
+
+	elseif TargetTypeUI.value == 1 then --joint
+
+		local offsetValue_0 = FlowBlock.GetFieldValue(StepRobotJointUI.offsetValue[0])
+		local offsetValue_1 = FlowBlock.GetFieldValue(StepRobotJointUI.offsetValue[1])
+		local offsetValue_2 = FlowBlock.GetFieldValue(StepRobotJointUI.offsetValue[2])
+		local offsetValue_3 = FlowBlock.GetFieldValue(StepRobotJointUI.offsetValue[3])
+		local offsetValue_4 = FlowBlock.GetFieldValue(StepRobotJointUI.offsetValue[4])
+		local offsetValue_5 = FlowBlock.GetFieldValue(StepRobotJointUI.offsetValue[5])
+		local jointPos = { StepRobotJointUI.value[0] + offsetValue_0, StepRobotJointUI.value[1] + offsetValue_1, StepRobotJointUI.value[2] + offsetValue_2,
+		StepRobotJointUI.value[3] + offsetValue_3, StepRobotJointUI.value[4] + offsetValue_4, StepRobotJointUI.value[5] + offsetValue_5 }
+		RobotController.HoldToRunGroupPtpJnt(jointPos)
+
+	end
+end
+
+local collectionOfStepsWithMissingToolOrTCP = {}
+local collectionOfStepsWithMissingTCP = {}
+local projectToolIdCollection = {}
+local projectToolNameCollection = {}
+local projectTcpIdCollection = {}
+function GetToolName(_toolId)
+    local _thisToolName = ""
+    for index_toolId, toolIdElement in pairs(projectToolIdCollection) do
+        if (toolIdElement == _toolId) then
+            _thisToolName = projectToolNameCollection[index_toolId]
+        break
+		end
+    end
+    return _thisToolName
+end
+function ReassignToolAndTCP()
+	if(#collectionOfStepsWithMissingToolOrTCP > 0) then
+		for index,thisStepId in pairs(collectionOfStepsWithMissingToolOrTCP) do
+			print(index .. ' ==> ' .. thisStepId)
+			PTable:set_Item('projectToolSelected_ID'..thisStepId, projectToolIdCollection[1])
+			PTable:set_Item('projectTcpSelected_ID'..thisStepId, ToolInstance.GetProjectToolTcps(GetToolName(projectToolIdCollection[1]))[0])
+		end
+	end
+
+	if(#collectionOfStepsWithMissingTCP > 0) then
+		for index,thisStepId in pairs(collectionOfStepsWithMissingTCP) do
+			print(index .. ' ==> ' .. thisStepId)
+			local thisStepToolid = PTable:get_Item('projectToolSelected_ID'..thisStepId)
+			PTable:set_Item('projectTcpSelected_ID'..thisStepId, ToolInstance.GetProjectToolTcps(GetToolName(thisStepToolid))[0])
+		end
+	end
+	Instance:ForceWriteParameterTableToFile();
+end
+
+if PTable:ContainsKey("Existing_step_id") == false then --Read existing_step_id or initialize
+	PTable:set_Item("Existing_step_id", TableSaveToFileformate(Existing_step_id))
+else
+	Existing_step_id = FileReadToTableformate(PTable:get_Item("Existing_step_id"))
+end
+
+
+
+if PTable:ContainsKey("current_step_id") == false then
+	PTable:set_Item("current_step_id", current_step_id)
+else
+	current_step_id = (PTable:get_Item("current_step_id"))
+end
+
+if PTable:ContainsKey("previous_step_id") == false then
+	PTable:set_Item("previous_step_id", previous_step_id)
+else
+	current_step_id = (PTable:get_Item("previous_step_id"))
+end
+
+
+local toolPreviousChoice
+local tcpPreviousChoice
+
+
+
+for index, j in pairs(ToolInstance.GetProjectTools()) do --get all project tool and build a dic for connection of tool ID and Name
+	projectToolDic[j.name] = j.id
+	projectToolName[index + 1] = j.name
+end
+
+if PTable:ContainsKey("Dropdown_ToolChoice_values_ID") and PTable:get_Item("Dropdown_ToolChoice_values_ID")~=nil then
+	toolPreviousChoice = PTable:get_Item("Dropdown_ToolChoice_values_ID")
+else
+	toolPreviousChoice = 0
+	PTable:set_Item("Dropdown_ToolChoice_values_ID"..current_step_id, toolPreviousChoice)
+end
+
+local tempNumberOftcp = 0
+for index, j in pairs(ToolInstance.GetProjectToolTcps(projectToolName[toolPreviousChoice + 1])) do --get all project tool tcp
+	projectToolTcp[index + 1] = j
+	tempNumberOftcp = index + 1
+end
+if PTable:ContainsKey("Dropdown_TcpChoice_values_ID") and PTable:get_Item("Dropdown_TcpChoice_values_ID")~=nil then
+	tcpPreviousChoice = PTable:get_Item("Dropdown_TcpChoice_values_ID")
+
+	if tcpPreviousChoice > tempNumberOftcp then
+		tcpPreviousChoice = 0
+		PTable:set_Item("Dropdown_TcpChoice_values_ID", tcpPreviousChoice)
+	end
+else
+	tcpPreviousChoice = 0
+
+	PTable:set_Item("Dropdown_TcpChoice_values_ID"..current_step_id, tcpPreviousChoice)
+end
+PTable:set_Item("projectToolSelected", projectToolDic[projectToolName[toolPreviousChoice + 1]])
+PTable:set_Item("projectTcpSelected", tcpPreviousChoice)
+
+
+
+
+ToolChoiceUI:ReEditOptions(projectToolName)
+ToolChoiceUI.value = toolPreviousChoice
+TcpChoiceUI:ReEditOptions(projectToolTcp)
+TcpChoiceUI.value = tcpPreviousChoice
+ToolChoiceUI:RefreshUI()
+TcpChoiceUI:RefreshUI()
+
+
+
+
+
+
+
+
+if #Existing_step_id ~= 0 then --If there are existing steps ,enable all UI.disable all reversely.
+	-- SpeedMmUI:SetInteractable(true)
+	-- SpeedPercUI:SetInteractable(true)
+	-- CollisionMarginUI:SetInteractable(true)
+	-- StepSizeUI:SetInteractable(true)
+	TrajectoryMotionTypeUI:SetInteractable(true)
+	StepNameUI:SetInteractable(true)
+	ToolChoiceUI:SetInteractable(true)
+    TcpChoiceUI:SetInteractable(true)
+	-- BlendsEnableUI:SetInteractable(true)
+	-- BlendsRadiusUI:SetInteractable(true)
+	-- DelayTimeUI:SetInteractable(true)
+	StepRobotJointUI:SetInteractable(true)
+	TargetTypeUI:SetInteractable(true)
+	-- ConditionSelectionUI:SetInteractable(true)
+	-- ProcedureSelectionUI:SetInteractable(true)
+	StepsListUI:SetInteractable(true)
+	StepTransformUI:SetInteractable(true)
+	-- ARCTransformUI:SetInteractable(true)
+	MotionSettingUI:SetVisible(true)
+	MotionSettingUI:SetInteractable(true)
+	-- local condition_tag = "List_ConditionSelection_values_ID" .. current_step_id
+	-- local procedure_tag = "List_ProcedureSelection_values_ID" .. current_step_id
+	-- if PTable:ContainsKey(condition_tag) == true and PTable:get_Item(condition_tag) ~= nil then
+	-- 	local temp_values = PTable:get_Item(condition_tag)
+	-- 	local condition_UI = Instance:GetUiElementByName("ConditionSelection")
+	-- 	if tostring(temp_values):sub(1, 1) == "S" or tostring(temp_values):sub(1, 1) == "n" then
+	-- 		condition_UI.value = temp_values
+	-- 	else
+	-- 		condition_UI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+	-- 	end
+	-- end
+	-- if PTable:ContainsKey(procedure_tag) == true and PTable:get_Item(condition_tag) ~= nil then
+	-- 	local temp_values = PTable:get_Item(procedure_tag)
+	-- 	local procedure_UI = Instance:GetUiElementByName("ProcedureSelection")
+	-- 	if tostring(temp_values):sub(1, 1) == "S" or tostring(temp_values):sub(1, 1) == "n" then
+	-- 		procedure_UI.value = temp_values
+	-- 	else
+	-- 		procedure_UI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+	-- 	end
+	-- end
+
+	local tcpdata = ToolInstance.GetProjectToolTCP(1, PTable:get_Item("Dropdown_TcpChoice_values_ID"..current_step_id))
+	temp = {}
+    for i = 0, 2 do
+        table.insert(temp, tonumber(tcpdata.Point.Position.value[i]))
+    end
+    for i = 0, 2 do
+        table.insert(temp, tonumber(tcpdata.Point.Rotation.value[i]))
+    end
+	StepTransformUI:SetTcpFlangeOffset(temp)
+else
+	-- SpeedMmUI:SetInteractable(false)
+	-- SpeedPercUI:SetInteractable(false)
+	-- CollisionMarginUI:SetInteractable(false)
+	-- StepSizeUI:SetInteractable(false)
+	TrajectoryMotionTypeUI:SetInteractable(false)
+	StepNameUI:SetInteractable(false)
+	-- BlendsEnableUI:SetInteractable(false)
+	-- BlendsRadiusUI:SetInteractable(false)
+	-- DelayTimeUI:SetInteractable(false)
+	ToolChoiceUI:SetInteractable(false)
+    TcpChoiceUI:SetInteractable(false)
+	StepTransformUI:SetInteractable(false)
+	StepRobotJointUI:SetInteractable(false)
+	TargetTypeUI:SetInteractable(false)
+	MotionSettingUI:SetVisible(false)
+	-- ConditionSelectionUI:SetInteractable(false)
+	-- ProcedureSelectionUI:SetInteractable(false)
+end
+
+
+
+
+
+-- Load All Variables in PTable
+for i, d in pairs(Instance.uiPageOnEdit.uiGroups) do
+	for j, k in pairs(d.uiElements) do
+		UiElement = Instance:GetUiElementByName(k.name) --find UIelement
+		UiElementType = UiElement:GetType().Name
+
+		if (UiElement.name ~= nil) then
+			ui_name = UiElement.name
+		else
+			ui_name = "Unkown"
+		end
+
+		if UiElement.name == "TrajectoryMotionType" or --these uielement should be svaed based their own ID
+			UiElement.name == "StepName" or
+			UiElement.name == "SpeedMm" or
+			UiElement.name == "SpeedPerc" or
+			UiElement.name == "CollisionMargin" or
+			UiElement.name == "StepSize" or
+			UiElement.name == "BlendsEnable" or
+			UiElement.name == "BlendsRadius" or
+			UiElement.name == "DegreeEnable" or
+			UiElement.name == "ArcDegree" or
+			UiElement.name == "DelaytimeBetweenPandC" or
+			UiElement.name == "ConditionSelection" or
+			UiElement.name == "TargetType" or
+			UiElement.name == "StepRobotJoint" or
+			UiElement.name == "ToolChoice" or
+			UiElement.name == "TcpChoice" or
+			UiElement.name == "ProcedureSelection" then
+			tag_name = UiElementType .. '_' .. ui_name .. '_values_ID' .. current_step_id
+		else
+			tag_name = UiElementType .. '_' .. ui_name .. '_values'
+		end
+
+		if UiElement.name == "StepTransform" or UiElement.name == "ARCTransform" then --for compatibility with old data
+			tag_name = 'Transform_' .. ui_name .. '_values_ID' .. current_step_id
+		end
+
+		-- if PTable:ContainsKey("Dropdown_TrajectoryMotionType_values") == false then
+		-- 	PTable:set_Item("Dropdown_TrajectoryMotionType_values", 1)
+		-- end
+
+		--tag_name=UiElementType..'_'..ui_name..'_values'
+
+		CS.UnityEngine.Debug.Log('Group Number: ' .. i ..
+			'\nElement Number: ' .. j ..
+			'\nUiElement Type: ' .. UiElementType ..
+			'\nUiElement Name: ' .. ui_name ..
+			'\nTag Name: ' .. tag_name)
+
+
+		-- [Check Box] [Text Display] [Text Input] [Int Input] [Float Input]
+		if (UiElementType == 'CheckBox') or
+			(UiElementType == 'Text_Display') or
+			(UiElementType == 'Text_Input') or
+			(UiElementType == 'Int_Input') or
+			(UiElementType == "Float_Input") or
+			(UiElementType == "Dropdown") then
+			-- Load Values
+			if (PTable:ContainsKey(tag_name)) then
+				UiElement.value = PTable:get_Item(tag_name)
+			end
+
+			-- [Button]
+		elseif (UiElementType == 'Button') then
+			-- [Transform] [Joint]
+		elseif (UiElementType == 'Transform') or
+			(UiElementType == 'Joint') or
+			(UiElementType == 'TCPTransform') then
+			if (PTable:ContainsKey(tag_name) and PTable:get_Item(tag_name) ~= nil) then
+				load_values = PTable:get_Item(tag_name)
+				n = 0
+				for value in load_values:gmatch('[^,%s]+') do
+					UiElement.value[n] = tonumber(value)
+					n = n + 1
+				end
+			end
+			if (PTable:ContainsKey(tag_name .. '_offsetValues') and PTable:get_Item(tag_name .. '_offsetValues') ~= nil) then
+				load_values = PTable:get_Item(tag_name .. '_offsetValues')
+				n = 0
+				for value in load_values:gmatch('[^,%s]+') do
+					UiElement.offsetValue[n] = value
+					n = n + 1
+				end
+			end
+
+			-- [Project Tool]
+		elseif UiElementType == 'ProjectTool' then
+			if (PTable:ContainsKey(tag_name .. '_transform')) then
+				-- Load: Transform
+				load_values = PTable:get_Item(tag_name .. '_transform') --load value from PTable
+				n = 0
+				for value in load_values:gmatch('[^,%s]+') do
+					UiElement.value.transform[n] = tonumber(value)
+					n = n + 1
+				end
+
+				-- Load: Tool Name
+				if PTable:ContainsKey(UiElementType .. '_' .. k.name .. '_values_toolName') then
+					UiElement.value.toolName = PTable:get_Item(tag_name .. '_toolName')
+				end
+
+				-- Load: TCP Number
+				if PTable:ContainsKey(UiElementType .. '_' .. k.name .. '_values_tcpNumber') then
+					UiElement.value.tcpNumber = PTable:get_Item(tag_name .. '_tcpNumber')
+				end
+			end
+
+
+			-- [Digital_Input] [Digital_Output]
+		elseif (UiElementType == 'Digital_Input') or
+			(UiElementType == 'Digital_Output') then
+			if (PTable:ContainsKey(tag_name)) then
+				UiElement:SetValueWithJsonString(ToJsonString(tostring(PTable:get_Item(tag_name))))
+			end
+
+
+			-- [List]		
+		elseif (UiElementType == "List") then
+			if (PTable:ContainsKey(tag_name) and PTable:get_Item(tag_name) ~= nil) then
+				local temp_values = PTable:get_Item(tag_name)
+
+				if tostring(temp_values):sub(1, 1) == "S" or tostring(temp_values):sub(1, 1) == "n" then
+					UiElement.value = temp_values
+				else
+					UiElement:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+				end
+
+
+
+				UiElement:SetValueWithJsonString(ToJsonString(tostring(PTable:get_Item(tag_name))))
+			end
+
+			-- [SubMenuLink]
+		elseif (UiElementType == "SubMenuLink") then
+			CS.UnityEngine.Debug.Log("Error Not Yet Implemented: " .. UiElementType)
+		elseif (UiElementType == "SortOrderButton") then
+		else
+			CS.UnityEngine.Debug.Log("Unknow Type: " .. UiElementType)
+			error("Unknow Type: " .. UiElementType)
+		end
+
+		--
+
+		if UiElement.name == 'HoldToRun' then
+			UiElement.EventManager:AddDecoratorLongPressBehavior("HoldToRunToTransform")
+		end
+
+		UiElement:RefreshUI()
+	end
+end
+
+
+--//////////////////////////below session for lock specific UI//////////////////////////////////////////
+-- if BlendsEnableUI.value == false and #Existing_step_id ~= 0 then
+-- 	BlendsRadiusUI:SetInteractable(false)
+-- elseif #Existing_step_id ~= 0 then
+-- 	BlendsRadiusUI:SetInteractable(true)
+-- end
+
+if StepsListUI.value ~= nil then
+	for i, obj in pairs(StepsListUI.value) do
+		--print(i)
+		obj[0].title='#'..(i+1)..' ' .. PTable:get_Item("Text_Input_StepName_values_ID"..Existing_step_id[i+1])
+		obj[0].color = { default_button_color[1], default_button_color[2], default_button_color[3] }
+		obj[0]:RefreshUI()
+	end
+	local triggered_button = Instance:GetUiElementByName("ID" .. current_step_id)
+	if triggered_button ~= nil then
+		triggered_button.color = { trigger_button_color[1], trigger_button_color[2], trigger_button_color[3] }
+		triggered_button:RefreshUI()
+	end
+end
+
+if PTable:ContainsKey("Dropdown_TargetType_values_ID" .. current_step_id) and PTable:get_Item("Dropdown_TargetType_values_ID" .. current_step_id)~=nil then
+	TargetTypeUI.value = PTable:get_Item("Dropdown_TargetType_values_ID" .. current_step_id)
+else
+	PTable:set_Item("Dropdown_TargetType_values_ID" .. current_step_id, 0)
+	TargetTypeUI.value = 0
+end
+TargetTypeUI:RefreshUI()
+if TargetTypeUI.value == 0 then --transform
+	StepRobotJointUI:SetVisible(false)
+	StepTransformUI:SetVisible(true)
+	StepTransformUI:DisplayGizmo(true)
+	if TrajectoryMotionTypeUI.value == 3 then
+		ARCTransformUI:SetVisible(true)
+		ARCTransformUI:SetInteractable(true)
+	else
+		ARCTransformUI:SetVisible(false)
+		ARCTransformUI:DisplayGizmo(false)
+	end
+	motionType = motionTypeDefault
+elseif TargetTypeUI.value == 1 then --joint
+	StepRobotJointUI:SetVisible(true)
+	StepTransformUI:SetVisible(false)
+	StepTransformUI:DisplayGizmo(false)
+	ARCTransformUI:SetVisible(false)
+	ARCTransformUI:DisplayGizmo(false)
+	ToolChoiceUI:SetVisible(false)
+	TcpChoiceUI:SetVisible(false)
+	motionType = motionTypeJointDefault
+end
+TrajectoryMotionTypeUI:ReEditOptions(motionType)
+TrajectoryMotionTypeUI:RefreshUI()
+
+-- if motionType[TrajectoryMotionTypeUI.value + 1] == "FREE" and #Existing_step_id ~= 0 then --if no steps be add,previous code would set all data to uninteractable
+-- 	SpeedMmUI:SetInteractable(false)
+-- 	SpeedPercUI:SetInteractable(true)
+-- 	CollisionMarginUI:SetInteractable(true)
+-- 	StepSizeUI:SetInteractable(true)
+-- elseif motionType[TrajectoryMotionTypeUI.value + 1] == "PTP" and #Existing_step_id ~= 0 then
+-- 	SpeedMmUI:SetInteractable(false)
+-- 	SpeedPercUI:SetInteractable(true)
+-- 	CollisionMarginUI:SetInteractable(false)
+-- 	StepSizeUI:SetInteractable(false)
+-- elseif #Existing_step_id ~= 0 then
+-- 	SpeedMmUI:SetInteractable(true)
+-- 	SpeedPercUI:SetInteractable(false)
+-- 	CollisionMarginUI:SetInteractable(false)
+-- 	StepSizeUI:SetInteractable(false)
+-- end
+
+-- SpeedMmUI:RefreshUI()
+-- SpeedPercUI:RefreshUI()
+-- CollisionMarginUI:RefreshUI()
+-- StepSizeUI:RefreshUI()
+
+StepTransformUI:SetTeachingTool(ToolChoiceUI.dropdownElementList[ToolChoiceUI.value],
+	TcpChoiceUI.dropdownElementList[TcpChoiceUI.value])
+
+
+
+--///////////////////////////////////////////////////////////////////////////////////////////////////
+
+--===========================Check Tool==============================================================================
+
+for index,j in pairs(ToolInstance.GetProjectTools()) do
+	table.insert(projectToolIdCollection, j.id)
+    table.insert(projectToolNameCollection, j.name)
+end
+
+for step_i = 1, #Existing_step_id do 
+	local thisStepId = Existing_step_id[step_i]
+	local thisToolId = PTable:get_Item('projectToolSelected_ID'..thisStepId)
+    local thisToolName
+
+	if not (tableContainsValue(projectToolIdCollection,thisToolId)) then
+		table.insert(collectionOfStepsWithMissingToolOrTCP,thisStepId) 
+	else
+
+        thisToolName = GetToolName(thisToolId)
+
+        projectTcpIdCollection = {}
+        for index,j in pairs(ToolInstance.GetProjectToolTcps(thisToolName)) do
+            table.insert(projectTcpIdCollection, j)
+        end
+
+        local thisTcpId = PTable:get_Item('projectTcpSelected_ID'..thisStepId)
+        if not (tableContainsValue(projectTcpIdCollection,thisTcpId)) then
+			table.insert(collectionOfStepsWithMissingTCP,thisStepId) 
+        end
+    end
+end
+
+if (#collectionOfStepsWithMissingToolOrTCP > 0 or #collectionOfStepsWithMissingTCP > 0) then
+	local popContent =
+	'Some of the assigned tool and tcp are not in the project anymore.\r\nThey will be replaced by the new project tool and tcp'
+	FlowBlock.ShowPopWindow("Error", popContent, "Confirm", ReassignToolAndTCP)
+end
+
+--=================================================================================================================
+PTable:set_Item('ProcessNumber', FlowBlock.GetProcessNumber())

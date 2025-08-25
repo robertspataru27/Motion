@@ -1,0 +1,214 @@
+-- [Note] Only runs once and loads ALL variables
+-- [Note] This file is Cached! Empty Cache and Reload after each edit during testing.
+
+-- Init 
+CS.UnityEngine.Debug.Log('Start > SubPage0 Init triggered 2')
+
+local PTable = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance.parameterTable
+local Instance = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance
+
+-- local function string:startswith(start)
+    -- return self:sub(1, #start) == start
+-- end
+
+local function ToJsonString(jsonStr)
+	local index = string.find(jsonStr, ':[^:]*$')
+	return string.sub(jsonStr, 1, index-1)
+end
+
+-- Verify PTable is setup (using dummy parameter)
+PTable:set_Item('Vender', 'Mantis Robotics Inc')
+vendor = PTable:get_Item('Vender')
+CS.UnityEngine.Debug.Log(vendor)
+local trigger_button_color={}
+local Existing_branch_id={}
+local Existing_branch_id_conditionsCount = {}
+trigger_button_color[1]=0.2
+trigger_button_color[2]=0.4
+trigger_button_color[3]=0.3
+local currenct_branch_id=0
+
+local function XXX(table_save) 
+    return table.concat(table_save,',')
+end 
+local function XXXX(table_save)
+    local datas={}
+    local n=1
+
+    if #file_read==0 then
+        return {}
+    end
+    for data in file_read:gmatch('[^,%s]+') do
+        datas[n]=data
+        n=n+1
+    end
+
+    return datas
+end
+
+
+if PTable:ContainsKey("Existing_branch_id")==false then
+    PTable:set_Item("Existing_branch_id",TableSaveToFileformate(Existing_branch_id))
+else 
+    Existing_branch_id=FileReadToTableformate(PTable:get_Item("Existing_branch_id"))
+end
+
+if PTable:ContainsKey("Existing_branch_id_conditionsCount")==false then
+    PTable:set_Item("Existing_branch_id_conditionsCount",TableSaveToFileformate(Existing_branch_id_conditionsCount))
+else 
+    Existing_branch_id_conditionsCount=FileReadToTableformate(PTable:get_Item("Existing_branch_id_conditionsCount"))
+end
+
+
+
+if PTable:ContainsKey("currenct_branch_id")==false then
+    PTable:set_Item("currenct_branch_id",currenct_branch_id)
+else 
+    currenct_branch_id=(PTable:get_Item("currenct_branch_id"))
+end
+
+local triggered_button=Instance:GetUiElementByName("ID"..currenct_branch_id)
+if triggered_button ~=nil then
+	triggered_button.color={trigger_button_color[1],trigger_button_color[2],trigger_button_color[3]}
+	triggered_button:RefreshUI()
+end
+
+
+
+
+
+if #Existing_branch_id ~=0 then
+    local condition_tag="List_condition_selection_values".."_ID"..currenct_branch_id
+	local temp_values=PTable:get_Item(condition_tag)
+	local condition_UI=Instance:GetUiElementByName("condition_selection")
+	if tostring(temp_values):sub(1,1)=="S" or tostring(temp_values):sub(1,1)=="n" then
+		condition_UI.value=temp_values
+	else
+		condition_UI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+	end
+end
+
+
+-- Load All Variables in PTable
+for i,d in pairs(Instance.uiPageOnEdit.uiGroups) do
+    
+	for j,k in pairs(d.uiElements) do
+        UiElement=Instance:GetUiElementByName(k.name)   --find UIelement
+        UiElementType=UiElement:GetType().Name
+
+		if(UiElement.name ~= nil) then
+			ui_name=UiElement.name
+		else
+			ui_name = "Unkown"
+		end
+		
+		tag_name=UiElementType..'_'..ui_name..'_values'
+        print(tag_name)
+		
+		CS.UnityEngine.Debug.Log('Group Number: '..i.. 
+						'\nElement Number: '..j ..
+						'\nUiElement Type: '..UiElementType ..
+						'\nUiElement Name: '..ui_name ..
+						'\nTag Name: ' .. tag_name)
+		
+		
+		-- [Check Box] [Text Display] [Text Input] [Int Input] [Float Input]
+        if (UiElementType=='CheckBox') or 
+		     (UiElementType=='Text_Display') or 
+		       (UiElementType=='Text_Input') or 
+		         (UiElementType=='Int_Input') or
+				   (UiElementType == "Float_Input") or
+				   (UiElementType == "Dropdown") then
+			-- Load Values
+            if(PTable:ContainsKey(tag_name)) then
+                UiElement.value=PTable:get_Item(tag_name)
+			end
+			
+			if UiElement.name=='branch_name' then
+				local triggered_button=Instance:GetUiElementByName("ID"..currenct_branch_id)
+
+				if triggered_button ~=nil then
+					triggered_button.value=UiElement.value
+					triggered_button:RefreshUI()
+				end
+			
+			end
+			
+			
+		-- [Transform] [Joint] 
+		elseif (UiElementType=='Transform') or 
+				(UiElementType=='Joint') then
+			if(PTable:ContainsKey(tag_name)) then
+                load_values=PTable:get_Item(tag_name)
+				n=0
+                for value in load_values:gmatch('[^,%s]+') do
+                    UiElement.value[n]=tonumber(value)
+                    n=n+1
+                end 
+			end
+
+
+        -- [Project Tool]
+        elseif UiElementType=='ProjectTool' then
+            if(PTable:ContainsKey(tag_name..'_transform')) then
+                -- Load: Transform
+				load_values=PTable:get_Item(tag_name..'_transform')  --load value from PTable
+                n=0
+                for value in load_values:gmatch('[^,%s]+') do
+                    UiElement.value.transform[n]=tonumber(value)
+                    n=n+1
+				end
+				
+				-- Load: Tool Name
+                if PTable:ContainsKey(UiElementType..'_'..k.name..'_values_toolName') then
+                    UiElement.value.toolName=PTable:get_Item(tag_name..'_toolName')
+                end
+				
+				-- Load: TCP Number
+                if PTable:ContainsKey(UiElementType..'_'..k.name..'_values_tcpNumber') then
+                    UiElement.value.tcpNumber=PTable:get_Item(tag_name..'_tcpNumber')
+                end
+			end	
+				
+		
+		-- [Digital_Input] [Digital_Output]
+		elseif (UiElementType == 'Digital_Input') or 
+			     (UiElementType == 'Digital_Output') then
+			if (PTable:ContainsKey(tag_name)) then
+                UiElement:SetValueWithJsonString(ToJsonString(tostring(PTable:get_Item(tag_name))))
+            end
+			
+		
+		-- [List]		
+		elseif (UiElementType == "List") then
+			if(ui_name=='Branch List') then
+				UiElement.DeletableTemplates=CS.BlockBranchingLuaInterface.GetDeletableTemplates()
+			end
+			if(PTable:ContainsKey(tag_name)) then
+
+				local temp_values=PTable:get_Item(tag_name)
+
+				if tostring(temp_values):sub(1,1)=="S" or tostring(temp_values):sub(1,1)=="n" then
+					UiElement.value=temp_values
+				else
+					UiElement:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+					PTable:set_Item(tag_name, UiElement.value)
+				end
+		
+
+
+                --UiElement:SetValueWithJsonString(ToJsonString(tostring(PTable:get_Item(tag_name))))
+            end
+
+		-- [SubMenuLink]
+		elseif (UiElementType == "SubMenuLink") then
+			CS.UnityEngine.Debug.Log("Error Not Yet Implemented: " .. UiElementType)
+			
+		else
+			CS.UnityEngine.Debug.Log("Unknow Type: " .. UiElementType)
+			error("Unknow Type: " .. UiElementType)
+		end
+		
+        UiElement:RefreshUI()
+    end
+end

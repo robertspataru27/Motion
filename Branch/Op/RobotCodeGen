@@ -1,0 +1,114 @@
+CS.UnityEngine.Debug.Log('<color=red>Start > Robot code gen triggered </color>')
+
+
+---Properties
+
+local Instance = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance
+local PTable = Instance.parameterTable
+
+local Existing_branch_id
+local Existing_branch_id_ConditionalCounts
+local allRealID = {}
+local allCondition = {}
+local allOptionName = {}
+
+-----------------------------------------------
+
+------------------local fuction for lua--------
+
+local function XXX(table_save)
+    return table.concat(table_save, ',')
+end
+
+local function XXXX(table_save)
+    local datas = {}
+    local n = 1
+
+    if #file_read == 0 then
+        return {}
+    end
+    for data in file_read:gmatch('[^,%s]+') do
+        datas[n] = data
+        n = n + 1
+    end
+
+    return datas
+end
+
+function SetAllRealID()
+    for key, value in pairs(Existing_branch_id) do
+        table.insert(allRealID, tonumber(value))
+    end
+end
+
+function SetOptionNames()
+    
+    for key, value in pairs(Existing_branch_id) do
+        local elem = Instance:GetUiElementByName("ID" .. value)
+        table.insert(allOptionName, elem.value)
+    end
+end
+
+function SetAllConditions()
+    for i, branchId in ipairs(Existing_branch_id) do
+        local condition_tag = "List_condition_selection_values" .. "_ID_" .. branchId
+        local conditionCount = Existing_branch_id_ConditionalCounts[i]
+
+        local branchConditions = {}
+        for j = 1, conditionCount, 1 do
+            local condition_RobotCode0Name = condition_tag .. "_" .. j - 1 .. "_robotCode0"
+            local condition_RobotCode1Name = condition_tag .. "_" .. j - 1 .. "_robotCode1"
+
+            local conditionRobotCode0 = PTable:get_Item(condition_RobotCode0Name)
+            local conditionRobotCode1 = PTable:get_Item(condition_RobotCode1Name)
+
+            -- Create an inner Lua table to store the strings for this condition
+            local conditionStrings = { conditionRobotCode0, conditionRobotCode1 }
+            if conditionCount == 0 then
+                print("<color=red>This branch </color>" .. branchConditions .."<color=red>does not has robot code</color>")
+            else
+                print("<color=red>Robot Code </color>", "<color=yellow>allRealID</color>" .. branchId, "<color=yellow>Index:</color>" .. j, "<color=yellow>RobotCode[0]:</color>" .. conditionRobotCode0)
+                print("<color=red>Robot Code </color>", "<color=yellow>allRealID</color>" .. branchId, "<color=yellow>Index:</color>" .. j, "<color=yellow>RobotCode[1]:</color>" .. conditionRobotCode1)
+            end
+
+            table.insert(branchConditions, conditionStrings) -- Add the inner table to branchConditions
+        end
+        table.insert(allCondition, branchConditions)
+    end
+end
+
+function CheckExisting_branch_idOnPTable()
+    if PTable:ContainsKey("Existing_branch_id") == true then
+        Existing_branch_id = FileReadToTableformate(PTable:get_Item("Existing_branch_id"));
+    else
+        CS.UnityEngine.Debug.Log('<color=red>there is no Existing_branch_id data on the PTable</color>')
+    end
+end
+
+function CheckExisting_branch_id_conditionsCountOnPTable()
+    if PTable:ContainsKey("Existing_branch_id_conditionsCount") == true then
+        Existing_branch_id_ConditionalCounts = FileReadToTableformate(PTable:get_Item(
+            "Existing_branch_id_conditionsCount"));
+    else
+        CS.UnityEngine.Debug.Log('<color=red>there is no Existing_branch_id data on the PTable</color>')
+    end
+end
+
+--------------------------------------------
+
+
+
+
+--------------------------------------------
+---WorkFlow---
+--------------------------------------------
+CheckExisting_branch_idOnPTable()
+CheckExisting_branch_id_conditionsCountOnPTable()
+SetAllRealID()
+SetAllConditions()
+SetOptionNames()
+--SetDataToC#BlockBranchingLuaInterface =>  BlockBranchingLuaInterface.SetBranchCriteria( List<int>, List<List<string>>)  List<List<string>>: Condition=>  AssignValue: Robot[0] Desition : Robot[1]
+CS.BlockBranchingLuaInterface.SetBranchNameAndCriteria(allRealID, allOptionName, allCondition)
+
+
+CS.UnityEngine.Debug.Log('<color=white>Start > End Robot code gen </color>')

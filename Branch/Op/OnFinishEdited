@@ -1,0 +1,526 @@
+-- On Edit
+-- Core Idea : 
+-- Every step of branch have their own unique ID in order to restore and update their relating UI.
+-- Data in Ptable would be saved with prefix with their own ID.
+-- Furthermore, "Existing_branch_id","current_branch_id" and "previous_branch_id" are saved in Ptable so programmer can get the number of branch.
+-- current step and the step selection moment. 
+
+
+--About ID generation:
+-- (1)programmer can use fuction :GenerateNewtagID() defined in onfinishEdit to generate new ID based on rule:
+--Rule:
+--If there is no missing number in exsiting ID sequence,new ID generated in order
+--If there is missing number in  exsiting ID sequence,new ID generated to fill the space in sequence
+--Example
+--Existing ID:[0,1,2,3]  -->New ID:4
+--Existing ID:[0,2,3]    -->New ID:1
+--(2)If deleting ID, delete id in existing_step_id must be sure be done 
+
+--About shared UI element:
+--When swiching steps, Ui would update based on corresponed data saved in Ptable. It should be noted that
+--(1)If user deleting steps,corresponded ID data should be set nil to avoid data be used by new step due to duplicated ID
+--(2)There are some constrains with Ui under some conditions,enable/visible fuction should be checked and called for every step.
+--For example:User can't be allowed set transform if he/she selecte target type of Joint,transform UiElement should set invisible 
+
+
+--About Condition:
+--(1)There are two type of data saved in PTable.One is for UI restore and the other is for robotcode0/robotcode1
+--(2)List(which is the list of condition) would be saved. If user add or delete condition, list would be triggered. If user edit condition,condition would be triggered
+
+
+--About Tag name saved in PTable
+--If the datas are related to unique ID:
+--==> tag_name=UiElementType..'_'..ui_name..'_values_ID'..id
+--If the datas are general or independent with ID:
+--==> tag_name=UiElementType..'_'..ui_name..'_values_ID'
+--------------------------------------------------------------------------------------------------------------------------------
+
+CS.UnityEngine.Debug.Log('Motion > Branch OnFinishEdited triggered')
+local Instance = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance
+local PTable = Instance.parameterTable
+local UiElement = Instance.uiElementOnEdit
+
+local UiElementType = Instance.typeOfUiElementOnEdit
+--  UiElementType = Instance.uiElementOnEdit:uiElementType <- The same as above
+--  UiElementType = Instance.uiElementOnEdit:GetType().Name <- The same as above
+-- Verify PTable is setup
+PTable:set_Item('Vender', 'Mantis Robotics Inc')
+if (UiElement.name ~= nil) then
+    ui_name = UiElement.name
+else
+    ui_name = "Unkown"
+end
+CS.UnityEngine.Debug.Log(ui_name)
+
+
+tag_name = UiElementType .. '_' .. ui_name .. '_values'
+
+--print(UiElementType)
+
+local function ToJsonString(jsonStr)
+    local index = string.find(jsonStr, ':[^:]*$')
+    return string.sub(jsonStr, 1, index - 1)
+end
+
+----------------------------------add fuction and program for this application----------------------------------------------------------------------------
+local function Check_If_Contain_Value(values, value)
+    for i = 0, #values do
+        if tonumber(values[i]) == value then
+            return true
+        end
+    end
+    return false
+end
+
+local function GenerateNewtagID(ids) --new tag id on branch   (infill missed id with new branch)
+    local max_id = -1
+    if #ids > 0 then
+        max_id = math.max(table.unpack(ids))
+    end
+
+    if max_id == (#ids - 1) then
+        return max_id + 1 -- if length equal to max_id ,just add 1 as new id
+    else
+        for i = 0, #ids do
+            if Check_If_Contain_Value(ids, i) == false then
+                return i
+            end
+        end
+    end
+end
+local function find_max_id(ids)
+    local max_id = 0
+    if #ids > 0 then
+        for i = 1, #ids do
+            if tonumber(ids[i]) > max_id then
+                max_id = tonumber(ids[i])
+            end
+        end
+        -- max_id = math.max(table.unpack(ids))
+    end
+    return max_id
+end
+
+local function XXX(table_save)
+    return table.concat(table_save, ',')
+end
+local function XXXX(table_save)
+    local datas = {}
+    local n = 1
+
+    if #file_read == 0 then
+        return {}
+    end
+    for data in file_read:gmatch('[^,%s]+') do
+        datas[n] = data
+        n = n + 1
+    end
+
+    return datas
+end
+
+function SetRobotCodeToPTable(currenct_branch_id)
+    local condition_tag = "List_condition_selection_values" .. "_ID_" .. currenct_branch_id
+    local condition_UI = Instance:GetUiElementByName("condition_selection")
+    for i, conObj in pairs(condition_UI.value) do
+        PTable:set_Item(condition_tag .. "_" .. i .. "_robotCode0", conObj[0].robotCode[0])
+        PTable:set_Item(condition_tag .. "_" .. i .. "_robotCode1", conObj[0].robotCode[1])
+    end
+end
+
+function SetExisting_branch_id_Counts(index, count)
+    if PTable:ContainsKey("Existing_branch_id_conditionsCount") == true then
+        Existing_branch_id_conditionsCount = FileReadToTableformate(PTable:get_Item("Existing_branch_id_conditionsCount"))
+    else
+        PTable:set_Item("Existing_branch_id_conditionsCount", TableSaveToFileformate(Existing_branch_id_conditionsCount))
+    end
+
+    if count ~= nil then
+        if tonumber(index) < 0 then
+            index = 0
+        end
+
+        Existing_branch_id_conditionsCount[tonumber(index)] = tostring(count);
+    else
+        table.remove(Existing_branch_id_conditionsCount, tonumber(index))
+    end
+
+    PTable:set_Item("Existing_branch_id_conditionsCount", TableSaveToFileformate(Existing_branch_id_conditionsCount))
+end
+
+function FindOutValueOfIndex(searchTable, searchValue)
+    for index, value in ipairs(searchTable) do
+        if value == searchValue then
+            return index
+        end
+    end
+    return nil
+end
+
+--tt={0,0}
+--table.insert(tt,0)
+--print('here')
+--print(GenerateNewtagID(tt))
+------------------------below list for local variable---------------------------------------
+
+
+
+
+local branch_selection_UiElements_groups = Instance:GetUiElementByName("Branch List").value
+local Existing_branch_id = {}
+local Existing_branch_id_conditionsCount = {}
+local default_button_color = {}
+local trigger_button_color = {}
+local currenct_branch_id = "0" --Just a default value
+local branch_name = {}
+default_button_color[1] = 0
+default_button_color[2] = 0.2
+default_button_color[3] = 0.6
+trigger_button_color[1] = 0.2
+trigger_button_color[2] = 0.4
+trigger_button_color[3] = 0.3
+if PTable:ContainsKey("default_branch_name") == false then                                                              
+    PTable:set_Item("default_branch_name", TableSaveToFileformate(branch_name))
+else
+    branch_name = FileReadToTableformate(PTable:get_Item("default_branch_name"))
+end
+
+if PTable:ContainsKey("currenct_branch_id") == false then
+    PTable:set_Item("currenct_branch_id", currenct_branch_id)
+else
+    currenct_branch_id = (PTable:get_Item("currenct_branch_id"))
+end
+
+
+if PTable:ContainsKey("Existing_branch_id") == false then
+    PTable:set_Item("Existing_branch_id", TableSaveToFileformate(Existing_branch_id))
+else
+    Existing_branch_id = FileReadToTableformate(PTable:get_Item("Existing_branch_id"))
+end
+
+
+if PTable:ContainsKey("Existing_branch_id_conditionsCount") == true then
+    Existing_branch_id_conditionsCount = FileReadToTableformate(PTable:get_Item("Existing_branch_id_conditionsCount"))
+else
+    PTable:set_Item("Existing_branch_id_conditionsCount", TableSaveToFileformate(Existing_branch_id_conditionsCount))
+end
+
+Existing_branch_number = #Existing_branch_id
+if UiElement.name == 'branch_name' then
+    local triggered_button = Instance:GetUiElementByName("ID" .. currenct_branch_id)
+
+    if triggered_button ~= nil then
+        triggered_button.value = UiElement.value
+        triggered_button:RefreshUI()
+       
+
+    end
+
+    -- local BranchListUi = Instance:GetUiElementByName("Branch List")
+    
+    -- PTable:set_Item("List_Branch List_values",BranchListUi.value)
+    -- print("Rename button")
+end
+
+if UiElement.name == "condition_selection" then
+    PTable:set_Item(tag_name .. "_ID" .. currenct_branch_id, UiElement.value)
+
+    
+    print("<color=red> currenct_branch_id</color>",currenct_branch_id)
+    SetRobotCodeToPTable(currenct_branch_id)
+
+    local findOutValueOfIndex = FindOutValueOfIndex(Existing_branch_id, currenct_branch_id)
+    print("<color=red> findOutValueOfIndex</color>",findOutValueOfIndex)
+    SetExisting_branch_id_Counts(findOutValueOfIndex, tablelength(UiElement.value))
+
+    UiElement:RefreshUI()
+end
+
+
+
+
+
+
+
+
+if UiElement.name == "Branch List" then
+    --branch_selection_UiElements_groups[0][0].color={1,1,0}
+    --branch_selection_UiElements_groups[0][0]:RefreshUI()
+    --First check if there is new or less items in list
+    if tablelength(branch_selection_UiElements_groups) > #Existing_branch_id then                                             --User add new branch
+        local New_Id = GenerateNewtagID(Existing_branch_id)
+        --print("c"..currenct_branch_id)
+
+        local triggered_button = Instance:GetUiElementByName("ID" .. currenct_branch_id)
+        --print(triggered_button)
+        if triggered_button ~= nil then
+            triggered_button.color[0] = default_button_color[0 + 1]
+            triggered_button.color[1] = default_button_color[1 + 1]
+            triggered_button.color[2] = default_button_color[2 + 1]
+            triggered_button:RefreshUI()
+        end
+        local condition_UI = Instance:GetUiElementByName("condition_selection")
+        condition_UI.value = nil
+        local condition_tag = "List_condition_selection_values" .. "_ID" .. New_Id
+        PTable:set_Item(condition_tag, condition_UI.value)
+
+        condition_UI:RefreshUI()
+        currenct_branch_id = tostring(New_Id)
+        PTable:set_Item("currenct_branch_id", currenct_branch_id)
+        branch_selection_UiElements_groups[Existing_branch_number][0].name = 'ID' .. New_Id --mark for un push
+        local current_branch_name = find_max_id(branch_name) + 1
+        table.insert(branch_name, current_branch_name)
+        PTable:set_Item("default_branch_name", TableSaveToFileformate(branch_name))
+        branch_selection_UiElements_groups[Existing_branch_number][0].value = "Branch " ..tostring(math.floor(current_branch_name))
+        branch_selection_UiElements_groups[Existing_branch_number][0].color = { trigger_button_color[1],
+            trigger_button_color[2], trigger_button_color[3] } --reset to defaults color as mark for unpush button
+        branch_selection_UiElements_groups[Existing_branch_number][0]:RefreshUI()
+        local branch_UI = Instance:GetUiElementByName('branch_name')
+        branch_UI.value = branch_selection_UiElements_groups[Existing_branch_number][0].value
+        branch_UI:RefreshUI()
+        PTable:set_Item("Text_Input_branch_name_values",branch_UI.value)
+        --print(New_Id)
+        table.insert(Existing_branch_id, New_Id)
+        
+        PTable:set_Item("Existing_branch_id", TableSaveToFileformate(Existing_branch_id))
+
+        SetExisting_branch_id_Counts(#Existing_branch_id, 0)
+    elseif tablelength(branch_selection_UiElements_groups) < #Existing_branch_id then                                              --User delete branch
+        for position, value in pairs(branch_selection_UiElements_groups) do
+            if tonumber(Existing_branch_id[position + 1]) ~= tonumber(value[0].name:sub(3, #value[0].name)) then --if selected branch was deleted,set first branch as default selected
+                if Existing_branch_id[position + 1] == currenct_branch_id then
+                    table.remove(Existing_branch_id, tonumber(position + 1))
+                    table.remove(branch_name, tonumber(position + 1))
+                    -- SetExisting_branch_id_Counts(tonumber(position + 1), nil)
+
+                    if #Existing_branch_id >= 1 then --there are still existing id
+                        local triggered_button = Instance:GetUiElementByName("ID" .. Existing_branch_id[1])
+                        local branch_UI = Instance:GetUiElementByName('branch_name')
+                        branch_UI.value = triggered_button.value
+                        branch_UI:RefreshUI()
+                        currenct_branch_id = Existing_branch_id[1]
+                        if triggered_button ~= nil then
+                            triggered_button.color[0] = trigger_button_color[0 + 1]
+                            triggered_button.color[1] = trigger_button_color[1 + 1]
+                            triggered_button.color[2] = trigger_button_color[2 + 1]
+                            triggered_button:RefreshUI()
+                            local branch_UI = Instance:GetUiElementByName('branch_name')
+                            branch_UI.value = triggered_button.value
+                            branch_UI:RefreshUI()
+                        end
+
+                        PTable:set_Item("Text_Input_branch_name_values",branch_UI.value)
+                    else
+                        currenct_branch_id = tostring(0)
+                    end
+                else
+                    table.remove(Existing_branch_id, tonumber(position + 1))
+                    table.remove(branch_name, tonumber(position + 1))
+                end
+                PTable:set_Item("default_branch_name", TableSaveToFileformate(branch_name))
+                PTable:set_Item("Existing_branch_id", TableSaveToFileformate(Existing_branch_id))
+                PTable:set_Item("currenct_branch_id", currenct_branch_id)
+                SetExisting_branch_id_Counts(tonumber(position + 1), nil)
+                
+            end
+        end
+        if tablelength(branch_selection_UiElements_groups) < #Existing_branch_id then
+            if Existing_branch_id[#Existing_branch_id] == currenct_branch_id then
+                table.remove(Existing_branch_id, tonumber(#Existing_branch_id))
+                table.remove(branch_name, tonumber(#branch_name))
+                if #Existing_branch_id >= 1 then --there are still existing id
+                    local triggered_button = Instance:GetUiElementByName("ID" .. Existing_branch_id[1])
+                    local branch_UI = Instance:GetUiElementByName('branch_name')
+                    branch_UI.value = triggered_button.value
+                    branch_UI:RefreshUI()
+                    currenct_branch_id = Existing_branch_id[1]
+                    if triggered_button ~= nil then
+                        triggered_button.color[0] = trigger_button_color[0 + 1]
+                        triggered_button.color[1] = trigger_button_color[1 + 1]
+                        triggered_button.color[2] = trigger_button_color[2 + 1]
+                        triggered_button:RefreshUI()
+                        local branch_UI = Instance:GetUiElementByName('branch_name')
+                        branch_UI.value = triggered_button.value
+                        branch_UI:RefreshUI()
+                    end
+                    PTable:set_Item("Text_Input_branch_name_values",branch_UI.value)
+                else
+                    currenct_branch_id = tostring(0)
+                end
+            else
+                table.remove(Existing_branch_id, tonumber(#Existing_branch_id))
+                table.remove(branch_name, tonumber(#branch_name))
+            end
+            PTable:set_Item("default_branch_name", TableSaveToFileformate(branch_name))
+            PTable:set_Item("Existing_branch_id", TableSaveToFileformate(Existing_branch_id))
+            PTable:set_Item("currenct_branch_id", currenct_branch_id)
+            SetExisting_branch_id_Counts(tonumber(#Existing_branch_id) + 1, nil)
+        end
+
+        local condition_tag = "List_condition_selection_values" .. "_ID" .. currenct_branch_id
+        local temp_values = PTable:get_Item(condition_tag)
+        local condition_UI = Instance:GetUiElementByName("condition_selection")
+        --print(#Existing_branch_id)
+        if #Existing_branch_id == 0 then
+            condition_UI.value = nil
+        else
+            if tostring(temp_values):sub(1, 1) == "S" or tostring(temp_values):sub(1, 1) == "n" then
+                condition_UI.value = temp_values
+            else
+                condition_UI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+            end
+        end
+
+
+        condition_UI:RefreshUI()
+    end
+elseif UiElementType == 'Button' then
+    --update main menu information
+    local branch_UI = Instance:GetUiElementByName('branch_name')
+
+
+    branch_UI.value = UiElement.value
+    branch_UI:RefreshUI()
+    PTable:set_Item("Text_Input_branch_name_values",branch_UI.value)
+
+
+    --chose branch
+
+    if UiElement.name:sub(3, #UiElement.name) ~= currenct_branch_id then
+        local triggered_button = Instance:GetUiElementByName("ID" .. currenct_branch_id)
+        --print(triggered_button)
+        if triggered_button ~= nil then
+            triggered_button.color[0] = default_button_color[0 + 1]
+            triggered_button.color[1] = default_button_color[1 + 1]
+            triggered_button.color[2] = default_button_color[2 + 1]
+            triggered_button:RefreshUI()
+        end
+
+        currenct_branch_id = UiElement.name:sub(3, #UiElement.name)
+        PTable:set_Item("currenct_branch_id", currenct_branch_id)
+        UiElement.color[0] = trigger_button_color[0 + 1]
+        UiElement.color[1] = trigger_button_color[1 + 1]
+        UiElement.color[2] = trigger_button_color[2 + 1]
+        UiElement:RefreshUI()
+    end
+    local condition_tag = "List_condition_selection_values" .. "_ID" .. currenct_branch_id
+    local condition_UI = Instance:GetUiElementByName("condition_selection")
+    --print(PTable:ContainsKey(condition_tag))
+    if PTable:ContainsKey(condition_tag) then
+        condition_UI.value = nil
+        --print(PTable:get_Item(condition_tag))
+        local temp_values = PTable:get_Item(condition_tag)
+
+        if tostring(temp_values):sub(1, 1) == "S" or tostring(temp_values):sub(1, 1) == "n" then
+            condition_UI.value = temp_values
+        else
+            condition_UI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+        end
+
+        condition_UI:RefreshUI()
+        --condition_UI.value=nil
+    else
+        condition_UI.value = nil
+        PTable:set_Item(condition_tag, condition_UI.value)
+
+        condition_UI:RefreshUI()
+        print("<color=yellow> RefreshUI </color>", condition_UI.name)
+    end
+
+    print('Button id=' .. UiElement.name:sub(3, #UiElement.name))
+    print('current id=' .. currenct_branch_id)
+elseif UiElementType == "Conditional" then
+    local condition_tag = "List_condition_selection_values" .. "_ID" .. currenct_branch_id
+    local condition_UI = Instance:GetUiElementByName("condition_selection")
+    PTable:set_Item(condition_tag, condition_UI.value)
+    SetRobotCodeToPTable(currenct_branch_id);
+    UiElement:RefreshUI()
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+---------------------------end---------------------------------------------------------------
+
+
+
+
+
+-- [CheckBox] [Text Display] [Text Input] [Int Input]
+if (UiElementType == "CheckBox") or
+    (UiElementType == "Text_Display") or
+    (UiElementType == "Text_Input") or
+    (UiElementType == "Float_Input") or
+    (UiElementType == "Int_Input") or
+    (UiElementType == "Digital_Output") or
+    (UiElementType == "Digital_Input") or
+    (UiElementType == "Dropdown") then
+    PTable:set_Item(tag_name, UiElement.value) --save to PTable
+    print("UIValue"..tostring(UiElement.value))
+    -- [Transform] [Joint]
+elseif (UiElementType == "Transform") or
+    (UiElementType == "Joint") then
+    current_values = {}
+    for i = 1, 6 do
+        current_values[i] = UiElement.value[i - 1] --write data to temp array
+    end
+    commaSeperatedValues = table.concat(current_values, ', ')
+    PTable:set_Item(tag_name, commaSeperatedValues)
+
+    -- Project Tool
+elseif (UiElementType == "ProjectTool") then
+    current_values = {}
+    for i = 1, 6 do
+        current_values[i] = UiElement.value.transform[i - 1] --write data to temp array
+    end
+    commaSeperatedValues = table.concat(current_values, ', ')
+
+    PTable:set_Item(tag_name .. '_transform', commaSeperatedValues) --save to PTable
+    PTable:set_Item(tag_name .. '_toolName', UiElement.value.toolName)
+    PTable:set_Item(tag_name .. '_tcpNumber', UiElement.value.tcpNumber)
+
+
+    -- [TODO] Add List Type (List<List<ConfigurationMenuUiElement>> value)
+elseif (UiElementType == "List") then
+    if UiElement.name ~= "condition_selection" then --we have dealed the items in previous sessions
+        PTable:set_Item(tag_name, UiElement.value)
+        print("ListUi")
+    end
+
+
+
+    -- error("type: " .. type(UiElement)) --> userData
+    -- error("type: " .. type(UiElement.value)) --> userData
+    -- for keyLayer1, subList in pairs(UiElement.value) do --> list<>
+    -- error("type: " .. type(mainList))	--> userData  (https://www.lua.org/pil/28.1.html)
+    -- for keyLayer2, element in pairs(subList) do
+    -- error("Console>> " .. element.value)
+    -- error("Console>> " .. element:GetType().Name)
+    -- element:GetType().Name
+    -- PTableKey = tag_name .. "_" .. keyLayer1 .. '_' .. keyLayer2 .. '_value'
+    -- CS.UnityEngine.Debug.Log("Console>> " .. PTableKey)
+    -- end
+    -- subTagName = tag_name .. '[' .. key1 .. '][' ..key2..']'
+    -- PTable:set_Item(subTagName, uiSubElement.value)
+    -- end
+    ------------------------------------New UiElement---------------------------------------------
+elseif (UiElementType == "Button") then
+    PTable:set_Item(tag_name .. '_color', UiElement.color)
+    PTable:set_Item(tag_name .. '_buttonname', UiElement.value)
+    print("button")
+else
+    CS.UnityEngine.Debug.Log('Type not yet configured (OnEdit): ' .. UiElementType)
+    --error("Unsetting type")
+end
+
+
+CS.UnityEngine.Debug.Log('<color=white>Move > End Edit </color>')

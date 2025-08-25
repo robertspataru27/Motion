@@ -1,0 +1,75 @@
+{
+  "titleOfPage": "Branch",
+  "uiGroups": [
+    {
+      "name": "Branch ",
+      "groupTitle": null,
+      "uiElements": [
+        {
+          "name": "Branch List",
+          "elementType": "List",
+          "elementDefinition": {
+            "title": "Branch Options",
+            "listElementTemplate": [
+              {
+                "name": "Branch Button",
+                "elementType": "Button",
+                "elementDefinition": {
+                  "value": "Untitle",
+                  "isIgnoreLocalizeValue": true,
+                  "title": null
+                }
+              }
+            ],
+            "defaultListCount": 0,
+            "isScrollable": true,
+            "isEditable": true,
+            "maxItemVisible": 5,
+            "value": null,
+            "layoutSetting": {
+              "isHorizontal": true,
+              "titleMultiLine": false
+            }
+          }
+        },
+        {
+          "name":"branch_name" ,
+          "elementType": "Text_Input",
+          "elementDefinition": {
+            "title":"Set Branch Name",
+            "value":"Untitle"
+
+          }
+        },
+        {
+          "name": "condition_selection",
+          "elementType": "List",
+          "elementDefinition": {
+            "title": "Conditions:",
+            "listElementTemplate":[{
+              "name":"condition ",
+              "elementType":"Conditional",
+              "elementDefinition":{
+                "title":null,
+                "value":null
+
+              }
+            }],
+            "defaultListCount": 0,
+            "isScrollable": true,
+            "isEditable": true,
+            "maxItemVisible": 5,
+            "value": null,
+            "layoutSetting": {
+              "isHorizontal": false,
+              "titleMultiLine": false
+            }
+            
+
+          }
+        }
+
+      ]
+    }
+  ]
+}

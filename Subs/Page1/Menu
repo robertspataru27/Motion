@@ -1,0 +1,213 @@
+
+{
+  "titleOfPage": "Motion",
+  "uiGroups": [
+    {
+      "name": "ParametersSetting",
+      "groupTitle": "Step Setting",
+      "uiElements": [
+        {
+          "name": "SpeedMm",
+          "elementType": "Int_Input",
+          "elementDefinition": {
+            "title": "Speed(mm/s) :",
+            "maxValue": 5000,
+            "minValue": 0,
+            "value": 0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "SpeedPerc",
+          "elementType": "Int_Input",
+          "elementDefinition": {
+            "title": "Speed(%) :",
+            "maxValue": 100,
+            "minValue": 0,
+            "value": 0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "SpeedDeg",
+          "elementType": "Int_Input",
+          "elementDefinition": {
+            "title": "Speed(degree/s) :",
+            "maxValue": 5000,
+            "minValue": 0,
+            "value": 0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "CollisionMargin",
+          "elementType": "Float_Input",
+          "elementDefinition": {
+            "title": "Collision Margin(mm) :",
+            "maxValue": 100,
+            "minValue": 16,
+            "value": 0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "StepSize",
+          "elementType": "Float_Input",
+          "elementDefinition": {
+            "title": "Step Size(deg) :",
+            "maxValue": 10,
+            "minValue": 5,
+            "value": 0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "DegreeEnable",
+          "elementType": "CheckBox",
+          "elementDefinition": {
+            "title": "Arc Motion ",
+            "value": false,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "ArcDegree",
+          "elementType": "Float_Input",
+          "elementDefinition": {
+            "title": "Angle(degree)",
+            "maxValue": 65535,
+            "minValue": 0,
+            "value": 0,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "BlendsEnable",
+          "elementType": "CheckBox",
+          "elementDefinition": {
+            "title": "Blending ",
+            "value": false,
+            "layoutSetting": null
+          }
+        },
+        {
+          "name": "BlendsRadius",
+          "elementType": "Float_Input",
+          "elementDefinition": {
+            "title": "Blending Radius(mm)",
+            "maxValue": 1000,
+            "minValue": 0,
+            "value": 0,
+            "layoutSetting": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "ParametersProcedureSetting",
+      "groupTitle": "Procedure List",
+      "uiElements": [
+        {
+          "name": "ProcedureSelection",
+          "elementType": "List",
+          "elementDefinition": {
+            "title": "Procedures:",
+            "listElementTemplate":[{
+              "name":"ProcedureSet",
+              "elementType":"ConditionalAssignment",
+              "elementDefinition":{
+                "title":null,
+                "value":null
+              }
+            }],
+            "defaultListCount": 0,
+            "isScrollable": true,
+            "isEditable": true,
+            "maxItemVisible": 3,
+            "value": null,
+            "layoutSetting": {
+              "isHorizontal": false,
+              "titleMultiLine": false
+            }
+          
+          }
+        }
+      ]
+    },
+    {
+      "name": "DelaytimePC",
+      "groupTitle": null,
+      "uiElements": [
+        {
+          "name": "DelaytimeBetweenPandC",
+          "elementType": "Int_Input",
+          "elementDefinition": {
+            "title": "Time Delay (ms)",
+            "maxValue": 65535,
+            "minValue": 0,
+            "value": 0,
+            "layoutSetting": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "ParametersSettingCondition",
+      "groupTitle": "Condition List",
+      "uiElements": [
+        {
+          "name": "ConditionSelection",
+          "elementType": "List",
+          "elementDefinition": {
+            "title": "Conditions:",
+            "listElementTemplate":[{
+              "name":"Condition ",
+              "elementType":"Conditional",
+              "elementDefinition":{
+                "title":null,
+                "value":null
+              }
+            }],
+            "defaultListCount": 0,
+            "isScrollable": true,
+            "isEditable": true,
+            "maxItemVisible": 3,
+            "value": null,
+            "layoutSetting": {
+              "isHorizontal": false,
+              "titleMultiLine": false
+            }
+          
+          }
+        }
+      ]
+    },
+    {
+      "name": "MotionSetting",
+      "groupTitle": "",
+      "uiElements": [
+        {
+          "name": "ReturnButton",
+          "elementType": "Button",
+          "elementDefinition": {
+            "value": "Back",
+            "title": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Version Display",
+      "groupTitle": null,
+      "uiElements": [
+        {
+          "name": "versionNumber",
+          "elementType": "Text_Display",
+          "elementDefinition": {
+            "title": ""
+          }
+        }
+      ]
+    }
+  ]
+}

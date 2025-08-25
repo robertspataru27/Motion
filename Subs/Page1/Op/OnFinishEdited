@@ -1,0 +1,1425 @@
+-- Core Idea : 
+-- Every step of motion have their own unique ID in order to restore and update their relating UI.
+-- Data in Ptable would be saved with prefix with their own ID.
+-- Furthermore, "Existing_step_id","current_step_id" and "previous_step_id" are saved in Ptable so programmer can get the number of step.
+-- current step and the step selection moment. 
+
+
+--About ID generation:
+-- (1)programmer can use fuction :GenerateNewtagID() defined in onfinishEdit to generate new ID based on rule:
+--Rule:
+--If there is no missing number in exsiting ID sequence,new ID generated in order
+--If there is missing number in  exsiting ID sequence,new ID generated to fill the space in sequence
+--Example
+--Existing ID:[0,1,2,3]  -->New ID:4
+--Existing ID:[0,2,3]    -->New ID:1
+--(2)If deleting ID, delete id in existing_step_id must be sure be done 
+
+--About shared UI element:
+--When swiching steps, Ui would update based on corresponed data saved in Ptable. It should be noted that
+--(1)If user deleting steps,corresponded ID data should be set nil to avoid data be used by new step due to duplicated ID
+--(2)There are some constrains with Ui under some conditions,enable/visible fuction should be checked and called for every step.
+--For example:User can't be allowed set transform if he/she selecte target type of Joint,transform UiElement should set invisible 
+
+
+--About Tag name saved in PTable
+--If the datas are related to unique ID:
+--==> tag_name=UiElementType..'_'..ui_name..'_values_ID'..id
+--If the datas are general or independent with ID:
+--==> tag_name=UiElementType..'_'..ui_name..'_values_ID'
+--------------------------------------------------------------------------------------------------------------------------------
+CS.UnityEngine.Debug.Log('Motion > sub > Page1 > Op > OnFinishEdited triggered')
+
+
+local Instance = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance
+local PTable = Instance.parameterTable
+local UiElement = Instance.uiElementOnEdit
+local UiElementType = Instance.typeOfUiElementOnEdit
+local ToolInstance = CS.ToolManagerLuaInterface
+local FlowBlock = CS.FlowBlockMenuLuaInterface;
+local subPageSwitcherManager = CS.ConfigurationMenuSwitchSubPageLuaInterface.Instance
+-------------------------------Used for this page--------------------------------------------
+local SpeedMmUI=Instance:GetUiElementByName('SpeedMm')
+local SpeedPercUI=Instance:GetUiElementByName('SpeedPerc')
+local SpeedDegUI=Instance:GetUiElementByName('SpeedDeg')
+local CollisionMarginUI = Instance:GetUiElementByName('CollisionMargin')
+local StepSizeUI = Instance:GetUiElementByName('StepSize')
+local TrajectoryMotionTypeUI = PTable:get_Item("Dropdown_TrajectoryMotionType_values_ID" .. PTable:get_Item("current_step_id"))
+-- local StepNameUI=Instance:GetUiElementByName('StepName')
+local BlendsEnableUI=Instance:GetUiElementByName("BlendsEnable" )
+local BlendsRadiusUI=Instance:GetUiElementByName("BlendsRadius")
+local DegreeEnableUI=Instance:GetUiElementByName("DegreeEnable" )
+local ArcDegreeUI=Instance:GetUiElementByName("ArcDegree")
+local DelayTimeUI = Instance:GetUiElementByName("DelaytimeBetweenPandC")
+-- local StepsListUI=Instance:GetUiElementByName("StepsList")
+-- local step_selection_UiElements_groups=StepsListUI.value
+-- local StepTransformUI=Instance:GetUiElementByName("StepTransform")
+local ConditionSelectionUI=Instance:GetUiElementByName('ConditionSelection')
+local ProcedureSelectionUI=Instance:GetUiElementByName('ProcedureSelection')
+-- local ToolChoiceUI=Instance:GetUiElementByName("ToolChoice")
+-- local TcpChoiceUI=Instance:GetUiElementByName("TcpChoice")
+-- local TargetTypeUI=Instance:GetUiElementByName("TargetType")
+-- local StepRobotJointUI=Instance:GetUiElementByName("StepRobotJoint")
+-- local StepEnableUI=Instance:GetUiElementByName('StepEnable')
+-- local Existing_step_id={}
+-- local default_button_color={}
+-- local trigger_button_color={}
+local current_step_id = PTable:get_Item("current_step_id")
+-- local previous_step_id='0'
+-- local step_name={}
+-- local Existing_step_number
+-- local projectToolDic={}
+-- local projectToolName={}
+-- local projectToolTcp={}
+local CollisionMarginUIDefault = 20
+local StepSizeUIDefault = 10
+local motionType={}
+local motionTypeDefault={'FREE', 'PTP', 'LINE'}
+local motionTypeJointDefault={'FREE', 'PTP'}
+
+
+-- default_button_color[1]=0
+-- default_button_color[2]=0.2
+-- default_button_color[3]=0.6
+-- trigger_button_color[1]=0.2
+-- trigger_button_color[2]=0.4
+-- trigger_button_color[3]=0.3
+
+
+
+
+
+
+PTable:set_Item('Vender', 'Mantis Robotics Inc')
+if(UiElement.name ~= nil) then
+	ui_name=UiElement.name
+else
+	ui_name = "Unkown"
+end
+
+
+CS.UnityEngine.Debug.Log("Onedit UI : "..ui_name)
+
+-- if PTable:ContainsKey("current_step_id")==false then
+--     PTable:set_Item("current_step_id",current_step_id)
+-- else
+--     current_step_id=(PTable:get_Item("current_step_id"))
+-- end
+-- if PTable:ContainsKey("previous_step_id")==false then 
+--     PTable:set_Item("previous_step_id",tostring(previous_step_id))
+-- else
+--     previous_step_id=PTable:get_Item("previous_step_id")
+-- end
+
+
+
+
+----------------------------------add fuction and program for this application----------------------------------------------------------------------------
+-- local function RefreshUIBasedOnIndexName(UIInstance,indexName)   --transform & projectTool can't use this due to their format
+--     if PTable:ContainsKey(indexName) then
+--         UIInstance.value=PTable:get_Item(indexName)
+--     else 
+--         UIInstance.value=nil;
+--     end
+        
+        
+local function round(num,point)
+    local tempMultple=10^point
+    return math.floor(tempMultple*num+0.5)/tempMultple
+end
+
+
+local function Check_If_Contain_Flag(flagString,flagCheck)                   --check if there is a particular flag in flagstring
+    for flags in string.gmatch(flagString, '([^,]+)') do
+        if tostring(flags)==tostring(flagCheck) then
+            return true
+        end
+    end
+    return false
+end
+
+
+
+local function ToJsonString(jsonStr)
+	local index = string.find(jsonStr, ':[^:]*$')
+	return string.sub(jsonStr, 1, index-1)
+end
+
+
+-------------------------------------------------------------------------------------------------------
+
+-- local function Check_If_Contain_Value(values,value)
+--     for i=0,#values do
+--         if tonumber(values[i])==value then
+--             return true
+--         end
+--     end
+--     return false
+-- end
+-- local function GenerateNewtagID(ids)  --new tag id on step   (infill missed id with new step)
+--     local max_id=-1
+--     if #ids> 0 then
+--         max_id=math.max(table.unpack(ids))
+--     end
+
+--     if max_id == (#ids-1) then
+--         return max_id+1 -- if length equal to max_id ,just add 1 as new id
+--     else 
+--         for i=0,#ids do
+--             if Check_If_Contain_Value(ids,i)==false then 
+            
+--                 return i
+--             end
+--         end
+        
+--     end
+-- end
+
+
+-----------------------------------------------------------------------------------
+-- local function find_max_id(ids)
+--     local max_id=0
+--     if #ids> 0 then
+--         max_id=math.max(table.unpack(ids))
+--     end
+--     return max_id
+    
+-- end
+
+-- local function XXX(table_save) 
+--     return table.concat(table_save,',')
+-- end 
+-- local function XXXX(table_save)
+--     local datas={}
+--     local n=1
+
+--     if #file_read==0 then
+--         return {}
+--     end
+--     for data in file_read:gmatch('[^,%s]+') do
+--         datas[n]=data
+--         n=n+1
+--     end
+
+--     return datas
+-- end
+-----------------------------------------------------------------------------------------------
+
+-- function ReassignToolAndTCP()
+
+--     for index,j in pairs(ToolInstance.GetProjectTools()) do
+--         projectToolDic[j.name]=j.id
+--         projectToolName[index+1]=j.name
+--     end
+--     PTable:set_Item("projectTcpSelected_ID"..current_step_id,TcpChoiceUI.value+1)
+--     PTable:set_Item("projectToolSelected_ID"..current_step_id,projectToolDic[projectToolName[ToolChoiceUI.value+1]])
+
+-- end
+
+-----------------------------------------------------------------------------------------------
+
+-- if PTable:ContainsKey("default_step_name")==false then
+--     PTable:set_Item("default_step_name",TableSaveToFileformate(step_name))
+-- else 
+--     step_name=FileReadToTableformate(PTable:get_Item("default_step_name"))
+-- end
+
+
+
+-- if PTable:ContainsKey("Existing_step_id")==false then
+--     PTable:set_Item("Existing_step_id",TableSaveToFileformate(Existing_step_id))
+-- else 
+--     Existing_step_id=FileReadToTableformate(PTable:get_Item("Existing_step_id"))
+-- end
+-- Existing_step_number=#Existing_step_id
+
+
+
+
+
+
+
+
+-- if UiElement.name=="StepsList" then
+-- 	if tablelength(step_selection_UiElements_groups)> #Existing_step_id then --User add new step
+
+--         local New_Id=GenerateNewtagID(Existing_step_id)
+--         --print("c"..current_step_id)
+
+--         local triggered_button=Instance:GetUiElementByName("ID"..current_step_id)
+--         --print(triggered_button)
+--         if triggered_button ~=nil then
+--             triggered_button.color[0]=default_button_color[0+1]
+--             triggered_button.color[1]=default_button_color[1+1]
+--             triggered_button.color[2]=default_button_color[2+1]
+--             triggered_button:RefreshUI()
+
+--         end
+
+--         ConditionSelectionUI.value=nil
+--         ProcedureSelectionUI.value=nil
+--         local condition_tag="List_ConditionSelection_values".."_ID"..New_Id
+--         local conditionRobot_tag0="List_ConditionSelection_robotCode0".."_ID"..New_Id
+--         local conditionRobot_tag1="List_ConditionSelection_robotCode1".."_ID"..New_Id
+--         local procedure_tag="List_ProcedureSelection_values".."_ID"..New_Id
+--         local procedureRobot_tag0="List_ProcedureSelection_robotCode0".."_ID"..New_Id
+--         local procedureRobot_tag1="List_ProcedureSelection_robotCode1".."_ID"..New_Id
+--         local procedureSkipWaitSS_Tag="SkipWaitSS_ID"..New_Id
+
+
+--         ConditionSelectionUI:RefreshUI()
+--         ProcedureSelectionUI:RefreshUI()
+--         previous_step_id=current_step_id
+--         current_step_id=tostring(New_Id)
+--         PTable:set_Item("previous_step_id",tostring(previous_step_id))
+--         PTable:set_Item("current_step_id",current_step_id)
+--         step_selection_UiElements_groups[Existing_step_number][0].name='ID'..New_Id   --mark for un push
+--         -- step_selection_UiElements_groups[Existing_step_number][1].name='stepEnableID'..New_Id   --mark for un push
+
+--         -- local stepEnable=Instance:GetUiElementByName('stepEnableID'..New_Id )
+--         local current_step_name=find_max_id(step_name)+1
+--         table.insert(step_name,current_step_name)
+--         PTable:set_Item("default_step_name",TableSaveToFileformate(step_name))
+
+--         --step_selection_UiElements_groups[Existing_step_number][0].value="step "..tostring(math.floor(current_step_name))
+--         step_selection_UiElements_groups[Existing_step_number][0].color={trigger_button_color[1],trigger_button_color[2],trigger_button_color[3]}  --reset to defaults color as mark for unpush button
+--         step_selection_UiElements_groups[Existing_step_number][0]:RefreshUI()
+
+
+
+
+--         --local step_UI=Instance:GetUiElementByName('step_name')
+--         --step_UI.value=step_selection_UiElements_groups[Existing_step_number][0].value
+--         --step_UI:RefreshUI()      
+--         --print(New_Id)
+--         table.insert(Existing_step_id,New_Id)
+
+--         PTable:set_Item("Existing_step_id",TableSaveToFileformate(Existing_step_id))
+
+--         ----------------------------set all to default value-----------------------------------
+--         SpeedMmUI.value=500
+--         SpeedPercUI.value=100
+--         CollisionMarginUI.value = CollisionMarginUIDefault
+--         StepSizeUI.value = StepSizeUIDefault
+--         TargetTypeUI.value=0
+--         TrajectoryMotionTypeUI.value=1
+--         StepNameUI.value='NewStep'
+--         BlendsEnableUI.value=false
+--         BlendsRadiusUI.value=0
+--         DelayTimeUI.value=0
+
+--         ConditionSelectionUI.value=nil
+--         ProcedureSelectionUI.value=nil
+
+
+
+--         StepTransformUI.value[0]=0
+--         StepTransformUI.value[1]=0
+--         StepTransformUI.value[2]=0
+--         StepTransformUI.value[3]=0
+--         StepTransformUI.value[4]=0
+--         StepTransformUI.value[5]=0
+
+--         StepRobotJointUI.value[0]=0
+--         StepRobotJointUI.value[1]=0
+--         StepRobotJointUI.value[2]=0
+--         StepRobotJointUI.value[3]=0
+--         StepRobotJointUI.value[4]=0
+--         StepRobotJointUI.value[5]=0
+
+--         local TransformUIName="Transform_StepTransform_values_ID"..current_step_id
+--         local TrajectoryMotionTypeUIName="Dropdown_TrajectoryMotionType_values_ID"..current_step_id
+--         local SpeedMmUIName="Int_Input_SpeedMm_values_ID"..current_step_id
+--         local SpeedPercUIName="Int_Input_SpeedPerc_values_ID"..current_step_id
+--         local CollisionMarginUIName="Float_Input_CollisionMargin_values_ID"..current_step_id
+--         local StepSizeUIName="Float_Input_StepSize_values_ID"..current_step_id
+--         local StepNameUIName = "Text_Input_StepName_values_ID"..current_step_id
+--         local BlendsEnableUIName="CheckBox_BlendsEnable_values_ID"..current_step_id
+--         local BlendsRadiusUIName="Float_Input_BlendsRadius_values_ID"..current_step_id
+--         local DelayTimeUIName="Int_Input_DelaytimeBetweenPandC_values_ID"..current_step_id
+--         local ConditionSelectionUIName="List_ConditionSelection_values".."_ID"..current_step_id
+--         local ProcedureSelectionUIName="List_ProcedureSelection_values".."_ID"..current_step_id
+--         local TcpChoiceUIName="Dropdown_TcpChoice_values_ID"..current_step_id
+--         local ToolChoiceUIName="Dropdown_ToolChoice_values_ID"..current_step_id
+--         local TargetTypeUIName="Dropdown_TargetType_values_ID"..current_step_id
+--         local StepRobotJointUIName="Joint_StepRobotJoint_values_ID"..current_step_id
+--         local transformCurrent_values={}
+--         local JointformCurrent_values={}
+--         for i=1,6 do
+
+--             transformCurrent_values[i]=StepTransformUI.value[i-1] --write data to temp array
+--         end
+--         for i=1,6 do
+
+--             JointformCurrent_values[i]=StepRobotJointUI.value[i-1] --write data to temp array
+--         end
+
+--         PTable:set_Item(TransformUIName, TableSaveToFileformate( transformCurrent_values))
+--         PTable:set_Item(TrajectoryMotionTypeUIName,TrajectoryMotionTypeUI.value)
+--         PTable:set_Item(SpeedMmUIName,SpeedMmUI.value)
+--         PTable:set_Item(SpeedPercUIName,SpeedPercUI.value)
+--         PTable:set_Item(CollisionMarginUIName,CollisionMarginUI.value)
+--         PTable:set_Item(StepSizeUIName,StepSizeUI.value)
+--         PTable:set_Item(StepNameUIName,StepNameUI.value)
+--         PTable:set_Item(BlendsEnableUIName,BlendsEnableUI.value)
+--         PTable:set_Item( BlendsRadiusUIName, BlendsRadiusUI.value)
+--         PTable:set_Item(DelayTimeUIName,DelayTimeUI.value)
+--         PTable:set_Item(ConditionSelectionUIName, ConditionSelectionUI.value)
+--         PTable:set_Item(ProcedureSelectionUIName, ProcedureSelectionUI.value)
+--         PTable:set_Item(TcpChoiceUIName,TcpChoiceUI.value)
+--         PTable:set_Item(ToolChoiceUIName,ToolChoiceUI.value)
+--         -- PTable:set_Item(stepEnable.name,stepEnable.value)
+--         PTable:set_Item(TargetTypeUIName,TargetTypeUI.value)
+--         PTable:set_Item(StepRobotJointUIName,TableSaveToFileformate( JointformCurrent_values))
+
+
+--         for index,j in pairs(ToolInstance.GetProjectTools()) do
+--             projectToolDic[j.name]=j.id
+--             projectToolName[index+1]=j.name
+--         end
+--         PTable:set_Item("projectToolSelected_ID"..current_step_id,projectToolDic[projectToolName[ToolChoiceUI.value+1]])
+--         PTable:set_Item("projectTcpSelected_ID"..current_step_id,TcpChoiceUI.value+1)
+--         StepTransformUI:RefreshUI()
+--         TrajectoryMotionTypeUI:RefreshUI()
+--         SpeedMmUI:RefreshUI()
+--         SpeedPercUI:RefreshUI()
+--         CollisionMarginUI:RefreshUI()
+--         StepSizeUI:RefreshUI()
+--         StepNameUI:RefreshUI()
+--         BlendsEnableUI:RefreshUI()
+--         BlendsRadiusUI:RefreshUI()
+--         DelayTimeUI:RefreshUI()
+--         ConditionSelectionUI:RefreshUI()
+--         ProcedureSelectionUI:RefreshUI()
+--         StepRobotJointUI:RefreshUI()
+--         TcpChoiceUI:RefreshUI()
+--         ToolChoiceUI:RefreshUI()
+
+
+
+
+
+
+
+
+
+--     elseif  tablelength(step_selection_UiElements_groups)< #Existing_step_id then    --User delete step
+
+--         for position,value in pairs(step_selection_UiElements_groups) do
+
+--             if tonumber(Existing_step_id[position+1])~=tonumber(value[0].name:sub(3,#value[0].name)) then                           --find which step was deleted
+-- ------------------------------------------------remove all values of deleted step---------------------------------------------------------------------------------------------
+--                 --print("hezshd,"..Existing_step_id[position+1])
+--                 PTable:set_Item("Dropdown_TargetType_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Transform_StepTransform_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Joint_StepRobotJoint_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Dropdown_TrajectoryMotionType_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Int_Input_SpeedMm_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Int_Input_SpeedPerc_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Float_Input_CollisionMargin_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Float_Input_StepSize_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("List_ConditionSelection_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("List_ProcedureSelection_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Dropdown_ToolChoice_values_ID"..Existing_step_id[position+1],nil)
+--                 PTable:set_Item("Dropdown_TcpChoice_values_ID"..Existing_step_id[position+1],nil)
+--                 -- PTable:set_Item("stepEnableID"..Existing_step_id[position+1],true)
+--                 PTable:set_Item("Int_Input_DelaytimeBetweenPandC_values_ID"..Existing_step_id[position+1],nil)
+
+--                 if PTable:ContainsKey("numberOfCondition_ID"..Existing_step_id[position+1]) then
+
+--                     for i=0,tonumber(PTable:get_Item("numberOfCondition_ID"..Existing_step_id[position+1]))-1,1 do
+--                         PTable:set_Item("List_ConditionSelection_robotCode0_ID"..Existing_step_id[position+1].."_"..i,nil)
+--                         PTable:set_Item("List_ConditionSelection_robotCode1_ID"..Existing_step_id[position+1].."_"..i,nil)
+--                     end
+--                 end
+--                 PTable:set_Item("numberOfCondition_ID"..Existing_step_id[position+1],0)
+--                 if PTable:ContainsKey("numberOfProcedure_ID"..Existing_step_id[position+1]) then
+
+--                     for i=0,tonumber(PTable:get_Item("numberOfProcedure_ID"..Existing_step_id[position+1]))-1,1 do
+--                         PTable:set_Item("List_ProcedureSelection_robotCode0_ID"..Existing_step_id[position+1].."_"..i,nil)
+--                         PTable:set_Item("List_ProcedureSelection_robotCode1_ID"..Existing_step_id[position+1].."_"..i,nil)
+--                     end
+--                 end
+--                 PTable:set_Item("numberOfProcedure_ID"..Existing_step_id[position+1],0)
+-- ------------------------------------------------------------------------------------------------------------
+
+
+--                 if Existing_step_id[position+1]==current_step_id then                                                               --if selected step was deleted,set first step as default selected 
+--                     table.remove(Existing_step_id,tonumber(position+1))
+--                     table.remove(step_name,tonumber(position+1))
+
+
+--                     if #Existing_step_id>=1 then                     --there are still existing id
+
+--                         local triggered_button=Instance:GetUiElementByName("ID"..Existing_step_id[1])
+--                         --local step_UI=Instance:GetUiElementByName('step_name')
+--                         --step_UI.value=triggered_button.value
+--                         --step_UI:RefreshUI()
+--                         previous_step_id=current_step_id
+--                         current_step_id=Existing_step_id[1]
+--                         if triggered_button~=nil then
+--                             triggered_button.color[0]=trigger_button_color[0+1]
+--                             triggered_button.color[1]=trigger_button_color[1+1]
+--                             triggered_button.color[2]=trigger_button_color[2+1]   
+--                             triggered_button:RefreshUI()   
+--                             -- local step_UI=Instance:GetUiElementByName('step_name')
+--                             --step_UI.value=triggered_button.value
+--                             -- step_UI:RefreshUI()      
+--                         end
+--                     else
+--                         current_step_id=tostring(0)
+--                     end
+--                 else
+--                     table.remove(Existing_step_id,tonumber(position+1))
+--                     table.remove(step_name,tonumber(position+1))
+--                 end
+
+--                 PTable:set_Item("default_step_name",TableSaveToFileformate(step_name))
+--                 PTable:set_Item("Existing_step_id",TableSaveToFileformate(Existing_step_id))
+--                 PTable:set_Item("previous_step_id",tostring(previous_step_id))
+--                 PTable:set_Item("current_step_id",current_step_id)
+--             end
+
+--         end
+--         if tablelength(step_selection_UiElements_groups)< #Existing_step_id then
+--                 ------------------------------------------------remove all values of deleted step---------------------------------------------------------------------------------------------
+
+--                 local lastValue = Existing_step_id[#Existing_step_id]
+--                 PTable:set_Item("Dropdown_TargetType_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Transform_StepTransform_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Joint_StepRobotJoint_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Dropdown_TrajectoryMotionType_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Int_Input_SpeedMm_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Int_Input_SpeedPerc_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Float_Input_CollisionMargin_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Float_Input_StepSize_values_ID"..lastValue,nil)
+--                 PTable:set_Item("List_ConditionSelection_values_ID"..lastValue,nil)
+--                 PTable:set_Item("List_ProcedureSelection_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Dropdown_ToolChoice_values_ID"..lastValue,nil)
+--                 PTable:set_Item("Dropdown_TcpChoice_values_ID"..lastValue,nil)
+--                 -- PTable:set_Item("stepEnableID"..lastValue,true)
+--                 PTable:set_Item("Int_Input_DelaytimeBetweenPandC_values_ID"..lastValue,nil)
+
+--                 if PTable:ContainsKey("numberOfCondition_ID"..lastValue) then
+
+--                     for i=0,tonumber(PTable:get_Item("numberOfCondition_ID"..lastValue))-1,1 do
+--                         PTable:set_Item("List_ConditionSelection_robotCode0_ID"..lastValue.."_"..i,nil)
+--                         PTable:set_Item("List_ConditionSelection_robotCode1_ID"..lastValue.."_"..i,nil)
+--                     end
+--                 end
+--                 PTable:set_Item("numberOfCondition_ID"..lastValue,0)
+--                 if PTable:ContainsKey("numberOfProcedure_ID"..lastValue) then
+
+--                     for i=0,tonumber(PTable:get_Item("numberOfProcedure_ID"..lastValue))-1,1 do
+--                         PTable:set_Item("List_ProcedureSelection_robotCode0_ID"..lastValue.."_"..i,nil)
+--                         PTable:set_Item("List_ProcedureSelection_robotCode1_ID"..lastValue.."_"..i,nil)
+--                     end
+--                 end
+--                 PTable:set_Item("numberOfProcedure_ID"..lastValue,0)
+-- ------------------------------------------------------------------------------------------------------------
+--                 if Existing_step_id[#Existing_step_id]==current_step_id then
+--                         table.remove(Existing_step_id,tonumber(#Existing_step_id))
+--                         table.remove(step_name,tonumber(#step_name))
+--                         if #Existing_step_id>=1 then                     --there are still existing id
+
+--                             local triggered_button=Instance:GetUiElementByName("ID"..Existing_step_id[1])
+--                             --local step_UI=Instance:GetUiElementByName('step_name')
+--                             --step_UI.value=triggered_button.value
+--                             --step_UI:RefreshUI()
+--                             previous_step_id=current_step_id
+--                             current_step_id=Existing_step_id[1]
+--                             if triggered_button~=nil then
+--                                 triggered_button.color[0]=trigger_button_color[0+1]
+--                                 triggered_button.color[1]=trigger_button_color[1+1]
+--                                 triggered_button.color[2]=trigger_button_color[2+1]   
+--                                 triggered_button:RefreshUI()    
+--                                 --local step_UI=Instance:GetUiElementByName('step_name')
+--                                 --step_UI.value=triggered_button.value
+--                                 --step_UI:RefreshUI()
+--                             end
+--                         else
+--                             previous_step_id=current_step_id
+--                             current_step_id=tostring(0)
+--                         end
+--                 else
+--                     table.remove(Existing_step_id,tonumber(#Existing_step_id))
+--                     table.remove(step_name,tonumber(#step_name))
+--                 end
+--                     PTable:set_Item("default_step_name",TableSaveToFileformate(step_name))
+--                     PTable:set_Item("Existing_step_id",TableSaveToFileformate(Existing_step_id))
+--                     PTable:set_Item("current_step_id",current_step_id)
+--                     PTable:set_Item("previous_step_id",tostring(previous_step_id))
+
+--         end
+--         local condition_tag="List_ConditionSelection_values".."_ID"..current_step_id
+--         if PTable:ContainsKey(condition_tag) then
+
+--             local temp_values=PTable:get_Item(condition_tag)
+
+
+--             --print(#Existing_step_id)
+--             if #Existing_step_id==0 or temp_values==nil then
+--                 ConditionSelectionUI.value=nil
+--             else
+--                 if tostring(temp_values):sub(1,1)=="S" or tostring(temp_values):sub(1,1)=="n" then
+--                     ConditionSelectionUI.value=temp_values
+--                 else
+--                     ConditionSelectionUI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+--                 end
+--             end
+
+
+
+--             ConditionSelectionUI:RefreshUI()
+--         end
+--         local procedure_tag="List_ProcedureSelection_values".."_ID"..current_step_id
+--         if PTable:ContainsKey(procedure_tag) then
+
+--             local temp_values=PTable:get_Item(procedure_tag)
+
+
+--             --print(#Existing_step_id)
+--             if #Existing_step_id==0 or temp_values==nil then
+--                 ProcedureSelectionUI.value=nil
+--             else
+--                 if tostring(temp_values):sub(1,1)=="S" or tostring(temp_values):sub(1,1)=="n" then
+--                     ProcedureSelectionUI.value=temp_values
+--                 else
+--                     ProcedureSelectionUI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+--                 end
+--             end
+
+
+
+--             ProcedureSelectionUI:RefreshUI()
+--         end
+
+--     end
+
+--     --chose branch
+-- elseif UiElementType=='Button' and UiElement.name~='ReassignToolAndTCP' and UiElement.name~='HoldToRun' then
+--     if UiElement.name:sub(3,#UiElement.name)~=current_step_id  then
+
+--         local triggered_button=Instance:GetUiElementByName("ID"..current_step_id)
+--         --print(triggered_button)
+--         if triggered_button ~=nil then
+--             triggered_button.color[0]=default_button_color[0+1]
+--             triggered_button.color[1]=default_button_color[1+1]
+--             triggered_button.color[2]=default_button_color[2+1]
+--             triggered_button:RefreshUI()
+
+--         end
+
+--         previous_step_id=current_step_id
+
+--         current_step_id=UiElement.name:sub(3,#UiElement.name)
+--         PTable:set_Item("current_step_id",current_step_id)
+--         PTable:set_Item("previous_step_id",tostring(previous_step_id))
+--         UiElement.color[0]=trigger_button_color[0+1]
+--         UiElement.color[1]=trigger_button_color[1+1]
+--         UiElement.color[2]=trigger_button_color[2+1]
+--         UiElement:RefreshUI()
+
+--     end
+--     local condition_tag="List_ConditionSelection_values".."_ID"..current_step_id
+
+--     --print(PTable:ContainsKey(condition_tag))
+--     if PTable:ContainsKey(condition_tag) then
+--         ConditionSelectionUI.value=nil
+--         --print(PTable:get_Item(condition_tag))
+--         local temp_values=PTable:get_Item(condition_tag)
+
+--         if tostring(temp_values):sub(1,1)=="S" or tostring(temp_values):sub(1,1)=="n" then
+--             ConditionSelectionUI.value=temp_values
+--         else
+--             ConditionSelectionUI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+--         end
+
+--         ConditionSelectionUI:RefreshUI()
+--         --condition_UI.value=nil
+--     else
+--         ConditionSelectionUI.value=nil
+--         PTable:set_Item(condition_tag,ConditionSelectionUI.value)
+
+--         ConditionSelectionUI:RefreshUI()
+--     end
+--     local condition_tag="List_ProcedureSelection_values".."_ID"..current_step_id
+
+--     --print(PTable:ContainsKey(condition_tag))
+--     if PTable:ContainsKey(condition_tag) then
+--         ProcedureSelectionUI.value=nil
+--         --print(PTable:get_Item(condition_tag))
+--         local temp_values=PTable:get_Item(condition_tag)
+
+--         if tostring(temp_values):sub(1,1)=="S" or tostring(temp_values):sub(1,1)=="n" then
+--             ProcedureSelectionUI.value=temp_values
+--         else
+--             ProcedureSelectionUI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+--         end
+
+--         ProcedureSelectionUI:RefreshUI()
+--         --condition_UI.value=nil
+--     else
+--         ProcedureSelectionUI.value=nil
+--         PTable:set_Item(condition_tag,ProcedureSelectionUI.value)
+
+--         ProcedureSelectionUI:RefreshUI()
+--     end
+
+
+--     -- print('Button id='..UiElement.name:sub(3,#UiElement.name))
+--     -- print('current id='..current_step_id)
+-- elseif UiElementType=="CheckBox"   then
+    -- if UiElement.name~="BlendsEnable" then
+    --     PTable:set_Item(UiElement.name,UiElement.value)
+    --     PTable:set_Item("List_StepsList_values",StepsListUI.value)
+    -- end
+-- elseif UiElementType=="Text_Input"   then
+--     if UiElement.name~="StepName" then
+--         PTable:set_Item(UiElement.name,UiElement.value)
+--     end
+-- else
+if UiElementType=="Conditional" then
+    local condition_tag="List_ConditionSelection_values".."_ID"..current_step_id
+
+    local conditionRobot_tag0="List_ConditionSelection_robotCode0".."_ID"..current_step_id
+    local conditionRobot_tag1="List_ConditionSelection_robotCode1".."_ID"..current_step_id
+    PTable:set_Item(condition_tag,ConditionSelectionUI.value)
+
+    local condition_index=0
+    for i,conObj in pairs(ConditionSelectionUI.value) do
+            PTable:set_Item(conditionRobot_tag0..'_'..condition_index,conObj[0].robotCode[0])
+            PTable:set_Item(conditionRobot_tag1..'_'..condition_index,conObj[0].robotCode[1])
+
+            condition_index=condition_index+1
+    end
+    local numberOfCondition_tag="numberOfCondition_ID"..current_step_id
+    PTable:set_Item(numberOfCondition_tag,condition_index)
+    UiElement:RefreshUI()
+elseif UiElementType=="ConditionalAssignment" then
+    local procedure_tag="List_ProcedureSelection_values".."_ID"..current_step_id
+
+    local procedureRobot_tag0="List_ProcedureSelection_robotCode0".."_ID"..current_step_id
+    local procedureRobot_tag1="List_ProcedureSelection_robotCode1".."_ID"..current_step_id
+    local procedureSkipWaitSS_Tag="SkipWaitSS_ID"..current_step_id
+    PTable:set_Item(procedure_tag,ProcedureSelectionUI.value)
+
+    local referenceVariableIdList = {}
+    local procedure_index=0 
+    for i,procObj in pairs(ProcedureSelectionUI.value) do
+            PTable:set_Item(procedureRobot_tag0..'_'..procedure_index,procObj[0].robotCode[0])
+            PTable:set_Item(procedureRobot_tag1..'_'..procedure_index,procObj[0].robotCode[1])
+            if Check_If_Contain_Flag(procObj[0].robotCode[2],"SkipWaitSS") then
+                PTable:set_Item(procedureSkipWaitSS_Tag..'_'..procedure_index,true)
+            else
+                PTable:set_Item(procedureSkipWaitSS_Tag..'_'..procedure_index,false)
+            end
+
+            for key, value in pairs(procObj[0].ReferenceVariableIdList) do
+                table.insert(referenceVariableIdList, value)
+            end
+
+            procedure_index=procedure_index+1
+    end
+    local numberOfProcedure_tag="numberOfProcedure_ID"..current_step_id
+    PTable:set_Item(numberOfProcedure_tag,procedure_index)
+    FlowBlock.CreateOrSetStepUIDDataPair(PTable:get_Item('ProcessNumber'), 0, 0, current_step_id, referenceVariableIdList)--0 for normal step
+    PTable:set_Item("List_ProcedureSelection_ReferenceVariableIdList_Step_" .. current_step_id, TableSaveToFileformate(referenceVariableIdList))
+    UiElement:RefreshUI()
+end
+
+
+
+-- if UiElement.name=="ToolChoice" then
+
+--     local toolPreviousChoice=0
+--     local tcplPreviousChoice=0
+--     for index,j in pairs(ToolInstance.GetProjectTools()) do
+--         projectToolDic[j.name]=j.id
+--         projectToolName[index+1]=j.name
+--     end
+
+
+--     toolPreviousChoice=UiElement.value
+--     if PTable:ContainsKey("Dropdown_TcpChoice_values_ID"..current_step_id)  then
+
+-- 	    tcpPreviousChoice=PTable:get_Item("Dropdown_TcpChoice_values_ID"..current_step_id)
+--         --print(projectToolName[tonumber(toolPreviousChoice)+1])
+
+
+--         local tempNumberOftcp
+--         for index,j in pairs(ToolInstance.GetProjectToolTcps(projectToolName[tonumber(toolPreviousChoice)+1])) do
+
+
+--             tempNumberOftcp=index+1
+--         end
+
+
+
+--         if tonumber(tcpPreviousChoice)>tempNumberOftcp then
+--             tcpPreviousChoice=0
+
+--         end
+--         PTable:set_Item("Dropdown_TcpChoice_values_ID"..current_step_id,tcpPreviousChoice)
+--     else
+--         tcpPreviousChoice=0
+
+-- 		PTable:set_Item("Dropdown_TcpChoice_values_ID"..current_step_id,tcpPreviousChoice)
+--     end
+
+--     for index,j in pairs(ToolInstance.GetProjectToolTcps(projectToolName[toolPreviousChoice+1])) do
+--         projectToolTcp[index+1]=j
+
+--     end
+
+--     PTable:set_Item("projectToolSelected_ID"..current_step_id,projectToolDic[projectToolName[toolPreviousChoice+1]])
+--     PTable:set_Item("projectTcpSelected_ID"..current_step_id,tcpPreviousChoice+1)
+--     ToolChoiceUI.value=toolPreviousChoice
+--     TcpChoiceUI:ReEditOptions(projectToolTcp)
+--     TcpChoiceUI.value=tcpPreviousChoice
+--     ToolChoiceUI:RefreshUI()
+--     TcpChoiceUI:RefreshUI()
+
+
+-- end
+-- if UiElement.name=="TcpChoice" then
+
+--     PTable:set_Item("projectTcpSelected_ID"..current_step_id,UiElement.value+1)
+-- end
+
+
+
+
+
+if  UiElement.name=="TrajectoryMotionType"  or
+    UiElement.name=="SpeedMm"               or
+    UiElement.name=="SpeedPerc"             or
+    UiElement.name=="SpeedDeg"              or
+    UiElement.name=="CollisionMargin"       or
+    UiElement.name=="StepSize"              or
+    UiElement.name=="BlendsEnable"          or
+    UiElement.name=="DegreeEnable"          or
+    UiElement.name=="StepName"              or
+    UiElement.name=="BlendsRadius"          or
+    UiElement.name=="ArcDegree"             or
+    UiElement.name=="TargetType"            or
+    UiElement.name=="StepRobotJoint"        or
+    UiElement.name=="ToolChoice"            or
+    UiElement.name=="DelaytimeBetweenPandC" or
+    UiElement.name=="TcpChoice" then
+    tag_name=UiElementType..'_'..ui_name..'_values_ID'..current_step_id
+else
+    tag_name=UiElementType..'_'..ui_name..'_values'
+end
+
+-- if UiElement.name=='ReassignToolAndTCP' then
+--     ReassignToolAndTCP()
+-- end
+
+-- if UiElement.name=="StepTransform" then                       --for compatibility with old data
+--     tag_name='Transform_'..ui_name..'_values_ID'..current_step_id
+-- end
+
+if UiElement.name=="ConditionSelection" then
+    PTable:set_Item(tag_name.."_ID"..current_step_id,UiElement.value)
+    UiElement:RefreshUI()
+
+    local conditionRobot_tag0="List_ConditionSelection_robotCode0".."_ID"..current_step_id
+    local conditionRobot_tag1="List_ConditionSelection_robotCode1".."_ID"..current_step_id
+    local condition_index=0
+    for i,conObj in pairs(UiElement.value) do
+            PTable:set_Item(conditionRobot_tag0..'_'..condition_index,conObj[0].robotCode[0])
+            PTable:set_Item(conditionRobot_tag1..'_'..condition_index,conObj[0].robotCode[1])
+            condition_index=condition_index+1
+    end
+    local numberOfCondition_tag="numberOfCondition_ID"..current_step_id
+    PTable:set_Item(numberOfCondition_tag,condition_index)
+
+end
+if UiElement.name=="ProcedureSelection" then
+    PTable:set_Item(tag_name.."_ID"..current_step_id,UiElement.value)
+    UiElement:RefreshUI()
+
+    local procedureRobot_tag0="List_ProcedureSelection_robotCode0".."_ID"..current_step_id
+    local procedureRobot_tag1="List_ProcedureSelection_robotCode1".."_ID"..current_step_id
+    local procedureSkipWaitSS_Tag="SkipWaitSS_ID"..current_step_id
+    local referenceVariableIdList = {}
+    local procedure_index=0
+    for i,procObj in pairs(UiElement.value) do
+            PTable:set_Item(procedureRobot_tag0..'_'..procedure_index,procObj[0].robotCode[0])
+            PTable:set_Item(procedureRobot_tag1..'_'..procedure_index,procObj[0].robotCode[1])
+            if Check_If_Contain_Flag(procObj[0].robotCode[2],"SkipWaitSS") then
+                PTable:set_Item(procedureSkipWaitSS_Tag..'_'..procedure_index,true)
+            else
+                PTable:set_Item(procedureSkipWaitSS_Tag..'_'..procedure_index,false)
+            end
+            for key, value in pairs(procObj[0].ReferenceVariableIdList) do
+                table.insert(referenceVariableIdList, value)
+            end
+            procedure_index=procedure_index+1
+    end
+    local numberOfProcedure_tag="numberOfProcedure_ID"..current_step_id
+    PTable:set_Item(numberOfProcedure_tag,procedure_index)
+    FlowBlock.CreateOrSetStepUIDDataPair(PTable:get_Item('ProcessNumber'), 0, 0, current_step_id, referenceVariableIdList)--0 for normal step
+    PTable:set_Item("List_ProcedureSelection_ReferenceVariableIdList_Step_" .. current_step_id, TableSaveToFileformate(referenceVariableIdList))
+
+end
+
+
+-- --------------------------------------Update UI bases on index-------------------
+
+-- local StepTransformUIName = "Transform_StepTransform_values_ID" .. current_step_id
+local TrajectoryMotionTypeUIName = "Dropdown_TrajectoryMotionType_values_ID" .. current_step_id
+local SpeedMmUIName = "Int_Input_SpeedMm_values_ID" .. current_step_id
+local SpeedPercUIName = "Int_Input_SpeedPerc_values_ID" .. current_step_id
+local SpeedDegUIName = "Int_Input_SpeedDeg_values_ID" .. current_step_id
+local CollisionMarginUIName = "Float_Input_CollisionMargin_values_ID" .. current_step_id
+local StepSizeUIName = "Float_Input_StepSize_values_ID" .. current_step_id
+-- local StepNameUIName = "Text_Input_StepName_values_ID" .. current_step_id
+local BlendsEnableUIName = "CheckBox_BlendsEnable_values_ID" .. current_step_id
+local BlendsRadiusUIName = "Float_Input_BlendsRadius_values_ID" .. current_step_id
+local DegreeEnableUIName = "CheckBox_DegreeEnable_values_ID" .. current_step_id
+local ArcDegreeUIName = "Float_Input_ArcDegree_values_ID" .. current_step_id
+local DelayTimeUIName = "Int_Input_DelaytimeBetweenPandC_values_ID" .. current_step_id
+-- local TargetTypeUIName = "Dropdown_TargetType_values_ID" .. current_step_id
+-- local StepRobotJointUIName = "Joint_StepRobotJoint_values_ID" .. current_step_id
+-- local TcpChoiceUIName = "Dropdown_TcpChoice_values_ID" .. current_step_id
+-- local ToolChoiceUIName = "Dropdown_ToolChoice_values_ID" .. current_step_id
+
+
+
+
+
+-- if ((current_step_id ~= previous_step_id) and (#Existing_step_id > 0)) then
+
+    -- previous_step_id = current_step_id
+    -- PTable:set_Item('previous_step_id',tostring(previous_step_id))
+
+    -- if(PTable:ContainsKey(StepTransformUIName) and PTable:get_Item(StepTransformUIName) ~=nil) then
+    --     load_values=PTable:get_Item(StepTransformUIName)
+    --     n=0
+    --     for value in load_values:gmatch('[^,%s]+') do
+    --         StepTransformUI.value[n]=tonumber(value)
+    --         n=n+1
+    --     end
+    -- else
+    --     StepTransformUI.value[0]=0
+    --     StepTransformUI.value[1]=0
+    --     StepTransformUI.value[2]=0
+    --     StepTransformUI.value[3]=0
+    --     StepTransformUI.value[4]=0
+    --     StepTransformUI.value[5]=0
+    -- end
+
+    -- if(PTable:ContainsKey(StepRobotJointUIName) and PTable:get_Item(StepRobotJointUIName) ~=nil) then
+    --     load_values=PTable:get_Item(StepRobotJointUIName)
+    --     n=0
+    --     for value in load_values:gmatch('[^,%s]+') do
+    --         StepRobotJointUI.value[n]=tonumber(value)
+    --         n=n+1
+    --     end
+    -- else
+    --     StepRobotJointUI.value[0]=0
+    --     StepRobotJointUI.value[1]=0
+    --     StepRobotJointUI.value[2]=0
+    --     StepRobotJointUI.value[3]=0
+    --     StepRobotJointUI.value[4]=0
+    --     StepRobotJointUI.value[5]=0
+    -- end
+
+    -- if PTable:ContainsKey(TargetTypeUIName) then
+    --     TargetTypeUI.value=PTable:get_Item(TargetTypeUIName)
+    -- else
+    --     TargetTypeUI.value=0;
+    --     PTable:set_Item( TargetTypeUIName, TargetTypeUI.value)
+    -- end
+    -- if TargetTypeUI.value==0 then    --transform
+    --     motionType = motionTypeDefault
+        -- StepRobotJointUI:SetVisible(false)
+        -- StepTransformUI:SetVisible(true)
+        -- StepTransformUI:DisplayGizmo(true)
+        -- ToolChoiceUI:SetVisible(true)
+        -- TcpChoiceUI:SetVisible(true)
+    -- elseif TargetTypeUI.value==1 then--joint
+    --     motionType = motionTypeJointDefault
+        -- StepRobotJointUI:SetVisible(true)
+        -- StepTransformUI:SetVisible(false)
+        -- StepTransformUI:DisplayGizmo(false)
+        -- ToolChoiceUI:SetVisible(false)
+        -- TcpChoiceUI:SetVisible(false)
+    -- end
+    -- TrajectoryMotionTypeUI:ReEditOptions(motionType)
+
+    -- if PTable:ContainsKey(TrajectoryMotionTypeUIName) then
+    --     TrajectoryMotionTypeUI.value = PTable:get_Item(TrajectoryMotionTypeUIName)
+    -- else
+    --     TrajectoryMotionTypeUI.value = 1
+    --     PTable:set_Item(TrajectoryMotionTypeUIName, TrajectoryMotionTypeUI.value)
+    -- end
+
+    -- if PTable:ContainsKey(SpeedMmUIName) then
+    --     SpeedMmUI.value = PTable:get_Item(SpeedMmUIName)
+    -- else
+    --     SpeedMmUI.value = 500
+    --     PTable:set_Item(SpeedMmUIName, SpeedMmUI.value)
+    -- end
+
+    -- if PTable:ContainsKey(ToolChoiceUIName) then
+    --     local   projectToolTcp={}
+    --     ToolChoiceUI.value=PTable:get_Item(ToolChoiceUIName)
+    --     for index,j in pairs(ToolInstance.GetProjectTools()) do
+    --         projectToolDic[j.name]=j.id
+    --         projectToolName[index+1]=j.name
+    --     end
+    --     for index,j in pairs(ToolInstance.GetProjectToolTcps(projectToolName[ToolChoiceUI.value+1])) do
+    --         projectToolTcp[index+1]=j
+    --     end
+    --     local tempNumberOftcp
+    --     for index,j in pairs(ToolInstance.GetProjectToolTcps(projectToolName[tonumber(ToolChoiceUI.value)+1])) do
+    --         tempNumberOftcp=index+1
+    --     end
+    --     TcpChoiceUI:ReEditOptions(projectToolTcp)
+    -- else
+    --     local toolPreviousChoice=0
+    --     local tcplPreviousChoice=0
+    --     for index,j in pairs(ToolInstance.GetProjectTools()) do
+    --         projectToolDic[j.name]=j.id
+    --         projectToolName[index+1]=j.name
+    --     end
+    --     PTable:set_Item(ToolChoiceUIName,ToolChoiceUI.value)
+    --     PTable:set_Item("projectToolSelected_ID"..current_step_id,projectToolDic[projectToolName[ToolChoiceUI.value+1]])
+    -- end
+
+    -- if PTable:ContainsKey(TcpChoiceUIName) then
+    --     TcpChoiceUI.value=PTable:get_Item(TcpChoiceUIName)
+    --     --PTable:set_Item("projectTcpSelected_ID"..current_step_id,TcpChoiceUI.value+1)
+    -- else
+    --     PTable:set_Item(TcpChoiceUIName,TcpChoiceUI.value)
+    --     PTable:set_Item("projectTcpSelected_ID"..current_step_id,TcpChoiceUI.value+1)
+    -- end
+
+    -- if PTable:ContainsKey(SpeedPercUIName) then
+    --     SpeedPercUI.value = PTable:get_Item(SpeedPercUIName)
+    -- else
+    --     SpeedPercUI.value = 100
+    --     PTable:set_Item(SpeedPercUIName, SpeedPercUI.value)
+    -- end
+    -- if PTable:ContainsKey(CollisionMarginUIName) then
+    --     CollisionMarginUI.value = PTable:get_Item(CollisionMarginUIName)
+    -- else
+    --     CollisionMarginUI.value = CollisionMarginUIDefault
+    --     PTable:set_Item(CollisionMarginUIName, CollisionMarginUI.value)
+    -- end
+    -- if PTable:ContainsKey(StepSizeUIName) then
+    --     StepSizeUI.value = PTable:get_Item(StepSizeUIName)
+    -- else
+    --     StepSizeUI.value = StepSizeUIDefault
+    --     PTable:set_Item(StepSizeUIName, StepSizeUI.value)
+    -- end
+    -- if PTable:ContainsKey(StepNameUIName) then
+    --     StepNameUI.value=PTable:get_Item(StepNameUIName)
+    -- else
+    --     StepNameUI.value='NewStep';
+    --     PTable:set_Item(StepNameUIName,StepNameUI.value)
+    -- end
+    -- if PTable:ContainsKey(BlendsEnableUIName) then
+    --     BlendsEnableUI.value = PTable:get_Item(BlendsEnableUIName)
+    -- else
+    --     BlendsEnableUI.value=false
+    --     PTable:set_Item(BlendsEnableUIName, BlendsEnableUI.value)
+    -- end
+    -- if PTable:ContainsKey(BlendsRadiusUIName) then
+    --     BlendsRadiusUI.value = PTable:get_Item(BlendsRadiusUIName)
+    -- else
+    --     BlendsRadiusUI.value = 0
+    --     PTable:set_Item(BlendsRadiusUIName, BlendsRadiusUI.value)
+    -- end
+    -- if PTable:ContainsKey(DelayTimeUIName) then
+    --     DelayTimeUI.value = PTable:get_Item(DelayTimeUIName)
+    -- else
+    --     DelayTimeUI.value = 0
+    --     PTable:set_Item(DelayTimeUIName, DelayTimeUI.value)
+    -- end
+
+
+
+    -- StepTransformUI:RefreshUI()
+    -- StepRobotJointUI:RefreshUI()
+    -- TrajectoryMotionTypeUI:RefreshUI()
+    -- SpeedMmUI:RefreshUI()
+    -- SpeedPercUI:RefreshUI()
+    -- CollisionMarginUI:RefreshUI()
+    -- StepSizeUI:RefreshUI()
+    -- StepNameUI:RefreshUI()
+    -- BlendsEnableUI:RefreshUI()
+    -- BlendsRadiusUI:RefreshUI()
+    -- DelayTimeUI:RefreshUI()
+    -- TargetTypeUI:RefreshUI()
+    -- ToolChoiceUI:RefreshUI()
+    -- TcpChoiceUI:RefreshUI()
+
+
+-- end
+
+
+-- -----------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------
+
+
+
+-- [CheckBox] [Text Display] [Text Input] [Int Input]
+if (UiElementType == "CheckBox") or
+     (UiElementType == "Text_Display") or
+       (UiElementType == "Text_Input") or
+         (UiElementType == "Float_Input") or
+           (UiElementType == "Int_Input") or
+		     (UiElementType == "Digital_Output") or
+			   (UiElementType == "Digital_Input") or
+			     (UiElementType == "Dropdown") then
+
+	PTable:set_Item(tag_name, UiElement.value) --save to PTable
+-- [Transform] [Joint]
+elseif (UiElementType == "Transform") or
+     (UiElementType == "Joint") or
+     (UiElementType=='TCPTransform')then
+	current_values={}
+    current_offsetValues={}
+
+	for i=1,6 do
+
+		current_values[i]=UiElement.value[i-1] --write data to temp array
+        current_offsetValues[i] = UiElement.offsetValue[i-1] --write data to temp array
+	end
+	commaSeperatedValues = table.concat(current_values, ', ')
+    commaSeperatedOffsetValues = table.concat(current_offsetValues, ', ')
+
+	PTable:set_Item(tag_name, commaSeperatedValues)
+    PTable:set_Item(tag_name .. '_offsetValues', commaSeperatedOffsetValues)
+
+-- Project Tool
+elseif (UiElementType == "ProjectTool") then
+	current_values={}
+    current_offsetValues={}
+	for i=1,6 do
+		current_values[i]=UiElement.value.transform[i-1] --write data to temp array
+        current_offsetValues[i] = UiElement.value.offsetValue[i-1] --write data to temp array
+	end
+	commaSeperatedValues = table.concat(current_values, ', ')
+    commaSeperatedOffsetValues = table.concat(current_offsetValues, ', ')
+
+	PTable:set_Item(tag_name..'_transform', commaSeperatedValues) --save to PTable
+     PTable:set_Item(tag_name .. '_offsetValues', commaSeperatedOffsetValues)
+    PTable:set_Item(tag_name..'_toolName', UiElement.value.toolName)
+	PTable:set_Item(tag_name..'_tcpNumber', UiElement.value.tcpNumber)
+
+
+-- [TODO] Add List Type (List<List<ConfigurationMenuUiElement>> value)
+elseif (UiElementType == "List") then
+    if UiElement.name~="ConditionSelection" and  UiElement.name~="ProcedureSelection"  then     --we have dealed the items in previous sessions
+        PTable:set_Item(tag_name, UiElement.value)
+    end
+
+elseif (UiElementType == "Button") then
+elseif (UiElementType == "ConditionalAssignment") then
+elseif (UiElementType == "Conditional") then
+else
+	CS.UnityEngine.Debug.Log('Type not yet configured (OnEdit): ' .. UiElementType)
+	error("Unsetting type: " .. UiElementType)
+end
+
+
+
+--//////////////////////////below session for lock specific UI//////////////////////////////////////////
+
+
+
+
+-- if PTable:ContainsKey("Dropdown_TargetType_values_ID"..current_step_id) then
+-- 	TargetTypeUI.value=PTable:get_Item("Dropdown_TargetType_values_ID"..current_step_id)
+-- else
+-- 	PTable:set_Item("Dropdown_TargetType_values_ID"..current_step_id,0)
+-- 	TargetTypeUI.value=0
+-- end
+-- TargetTypeUI:RefreshUI()
+if PTable:get_Item("Dropdown_TargetType_values_ID" .. current_step_id) == 0 then    --transform
+    motionType = motionTypeDefault
+	-- StepRobotJointUI:SetVisible(false)
+	-- StepTransformUI:SetVisible(true)
+    -- StepTransformUI:DisplayGizmo(true)
+    -- ToolChoiceUI:SetVisible(true)
+    -- TcpChoiceUI:SetVisible(true)
+elseif PTable:get_Item("Dropdown_TargetType_values_ID" .. current_step_id) == 1 then--joint
+    motionType = motionTypeJointDefault
+	-- StepRobotJointUI:SetVisible(true)
+	-- StepTransformUI:SetVisible(false)
+    -- StepTransformUI:DisplayGizmo(false)
+    -- ToolChoiceUI:SetVisible(false)
+    -- TcpChoiceUI:SetVisible(false)
+end
+-- TrajectoryMotionTypeUI:ReEditOptions(motionType)
+-- TrajectoryMotionTypeUI:RefreshUI()
+--error(PTable:get_Item("Dropdown_TrajectoryMotionType_values_ID1"))
+
+-- if UiElement.name == 'TargetType' then
+--     if TargetTypeUI.value==0 then
+--         TrajectoryMotionTypeUI.value=1
+--         TrajectoryMotionTypeUI:RefreshUI()
+--     else
+--         TrajectoryMotionTypeUI.value=0
+--         TrajectoryMotionTypeUI:RefreshUI()
+--     end
+--     PTable:set_Item("Dropdown_TrajectoryMotionType_values_ID" .. current_step_id, TrajectoryMotionTypeUI.value)
+-- end
+
+-- if UiElement.name == "Dropdown_TrajectoryMotionType_values_ID" .. current_step_id then
+--     PTable:set_Item("Dropdown_TrajectoryMotionType_values_ID" .. current_step_id, UiElement.value)
+-- end
+
+
+-- if motionType[TrajectoryMotionTypeUI.value + 1]=="FREE" and #Existing_step_id ~=0 then       --if no steps be add,previous code would set all data to uninteractable
+-- print("QQPR", TrajectoryMotionTypeUI.value, motionType[TrajectoryMotionTypeUI.value + 1])
+print("MOTION TYPE", motionType[TrajectoryMotionTypeUI])
+if motionType[TrajectoryMotionTypeUI + 1] == "FREE" then       --if no steps be add,previous code would set all data to uninteractable
+    -- print("QQPR FREE")
+    BlendsEnableUI.value = true
+    BlendsEnableUI:SetVisible(false)
+    SpeedMmUI:SetVisible(false)
+    SpeedMmUI.value = 500
+    SpeedPercUI:SetVisible(true)
+    SpeedPercUI:SetInteractable(true)
+    SpeedDegUI:SetVisible(false)
+    SpeedDegUI.value = 0
+    CollisionMarginUI:SetVisible(true)
+    CollisionMarginUI:SetInteractable(true)
+    StepSizeUI:SetVisible(true)
+    StepSizeUI:SetInteractable(true)
+
+    PTable:set_Item(SpeedMmUIName, SpeedMmUI.value)
+    PTable:set_Item(SpeedDegUIName, SpeedDegUI.value)
+
+-- elseif motionType[TrajectoryMotionTypeUI.value + 1]=="PTP" and #Existing_step_id ~=0 then
+elseif motionType[TrajectoryMotionTypeUI + 1] == "PTP" then
+    -- print("QQPR PTP")
+    BlendsEnableUI:SetVisible(true)
+    SpeedMmUI:SetVisible(false)
+    SpeedMmUI.value = 500
+    SpeedPercUI:SetVisible(true)
+    SpeedPercUI:SetInteractable(true)
+    SpeedDegUI:SetVisible(false)
+    SpeedDegUI.value = 0
+    CollisionMarginUI:SetVisible(false)
+    CollisionMarginUI.value = CollisionMarginUIDefault
+    StepSizeUI:SetVisible(false)
+    StepSizeUI.value = StepSizeUIDefault
+
+    PTable:set_Item(SpeedMmUIName, SpeedMmUI.value)
+    PTable:set_Item(SpeedDegUIName, SpeedDegUI.value)
+    PTable:set_Item(CollisionMarginUIName, CollisionMarginUI.value)
+    PTable:set_Item(StepSizeUIName, StepSizeUI.value)
+-- elseif  #Existing_step_id ~=0 then
+elseif motionType[TrajectoryMotionTypeUI + 1] == "LINE" then
+    print("QQPR LIN")
+    BlendsEnableUI:SetVisible(true)
+    SpeedMmUI:SetVisible(true)
+    SpeedMmUI:SetInteractable(true)
+    SpeedPercUI:SetVisible(false)
+    SpeedPercUI.value = 100
+    SpeedDegUI:SetVisible(false)
+    SpeedDegUI.value = 0
+    CollisionMarginUI:SetVisible(false)
+    CollisionMarginUI.value = CollisionMarginUIDefault
+    StepSizeUI:SetVisible(false)
+    StepSizeUI.value = StepSizeUIDefault
+
+    PTable:set_Item(SpeedPercUIName, SpeedPercUI.value)
+    PTable:set_Item(SpeedDegUIName, SpeedDegUI.value)
+    PTable:set_Item(CollisionMarginUIName, CollisionMarginUI.value)
+    PTable:set_Item(StepSizeUIName, StepSizeUI.value)
+elseif motionType[TrajectoryMotionTypeUI + 1] == "ARC" then
+    -- print("QQPR LIN")
+    SpeedMmUI:SetVisible(true)
+    SpeedMmUI:SetInteractable(true)
+    SpeedPercUI:SetVisible(false)
+    SpeedPercUI.value = 100
+    SpeedDegUI:SetVisible(true)
+    SpeedDegUI:SetInteractable(true)
+    CollisionMarginUI:SetVisible(false)
+    CollisionMarginUI.value = CollisionMarginUIDefault
+    StepSizeUI:SetVisible(false)
+    StepSizeUI.value = StepSizeUIDefault
+
+    PTable:set_Item(SpeedPercUIName, SpeedPercUI.value)
+    PTable:set_Item(CollisionMarginUIName, CollisionMarginUI.value)
+    PTable:set_Item(StepSizeUIName, StepSizeUI.value)
+end
+BlendsEnableUI:RefreshUI()
+SpeedMmUI:RefreshUI()
+SpeedPercUI:RefreshUI()
+SpeedDegUI:RefreshUI()
+CollisionMarginUI:RefreshUI()
+StepSizeUI:RefreshUI()
+
+if BlendsEnableUI.value == false then
+    BlendsRadiusUI.value = 0
+	BlendsRadiusUI:SetInteractable(false)
+	BlendsRadiusUI:SetVisible(false)
+    PTable:set_Item(BlendsRadiusUIName, 0)
+else
+	BlendsRadiusUI:SetInteractable(true)
+    BlendsRadiusUI:SetVisible(true)
+end
+if DegreeEnableUI.value == false then
+    ArcDegreeUI.value = 0
+	ArcDegreeUI:SetInteractable(false)
+	ArcDegreeUI:SetVisible(false)
+    PTable:set_Item(ArcDegreeUIName, 0)
+else
+	ArcDegreeUI:SetInteractable(true)
+    ArcDegreeUI:SetVisible(true)
+end
+
+BlendsEnableUI:RefreshUI()
+BlendsRadiusUI:RefreshUI()
+DegreeEnableUI:RefreshUI()
+ArcDegreeUI:RefreshUI()
+
+-- if #Existing_step_id ~=0 then
+
+--SpeedMmUI:SetInteractable(true)
+--SpeedPercUI:SetInteractable(true)
+-- TrajectoryMotionTypeUI:SetInteractable(true)
+-- StepNameUI:SetInteractable(true)
+BlendsEnableUI:SetInteractable(true)
+DegreeEnableUI:SetInteractable(true)
+-- ToolChoiceUI:SetInteractable(true)
+-- TcpChoiceUI:SetInteractable(true)
+-- BlendsRadiusUI:SetInteractable(true)
+--StepsListUI:SetInteractable(true)
+DelayTimeUI:SetInteractable(true)
+-- StepTransformUI:SetInteractable(true)
+-- StepRobotJointUI:SetInteractable(true)
+-- TargetTypeUI:SetInteractable(true)
+ConditionSelectionUI:SetInteractable(true)
+ProcedureSelectionUI:SetInteractable(true)
+-- local condition_tag = "List_ConditionSelection_values_ID" .. current_step_id
+
+-- if PTable:ContainsKey(condition_tag) then
+
+--     local temp_values = PTable:get_Item(condition_tag)
+
+
+
+--     if tostring(temp_values):sub(1,1) == "S" or tostring(temp_values):sub(1,1) == "n" then
+--         ConditionSelectionUI.value = temp_values
+--     else
+--         ConditionSelectionUI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+--     end
+-- end
+-- local procedure_tag = "List_ProcedureSelection_values_ID" .. current_step_id
+
+-- if PTable:ContainsKey(procedure_tag) then
+
+--     local temp_values = PTable:get_Item(procedure_tag)
+
+
+
+--     if tostring(temp_values):sub(1,1) == "S" or tostring(temp_values):sub(1,1) == "n" then
+--         ProcedureSelectionUI.value = temp_values
+--     else
+--         ProcedureSelectionUI:SetValueWithJsonString(ToJsonString(tostring(temp_values)))
+--     end
+-- end
+
+    -- local tcpdata = ToolInstance.GetProjectToolTCP(1, PTable:get_Item("Dropdown_TcpChoice_values"))
+	-- temp = {}
+    -- for i = 0, 2 do
+    --     table.insert(temp, tonumber(tcpdata.Point.Position.value[i]))
+    -- end
+    -- for i = 0, 2 do
+    --     table.insert(temp, tonumber(tcpdata.Point.Rotation.value[i]))
+    -- end
+	-- StepTransformUI:SetTcpFlangeOffset(temp)
+-- else
+
+    -- SpeedMmUI.value=500
+    -- SpeedPercUI.value=100
+    -- CollisionMarginUI.value=CollisionMarginUIDefault
+    -- StepSizeUI.value=StepSizeUIDefault
+    -- StepNameUI.value='NewStep'
+    -- BlendsEnableUI.value=false
+    -- BlendsRadiusUI.value=0
+    -- DelayTimeUI.value=0
+    -- StepTransformUI.value=nil
+    -- TargetTypeUI.value=0
+    -- TrajectoryMotionTypeUI.value=1
+    -- ConditionSelectionUI.value=nil
+    -- ProcedureSelectionUI.value=nil
+    -- SpeedMmUI:RefreshUI()
+    -- SpeedPercUI:RefreshUI()
+    -- CollisionMarginUI:RefreshUI()
+    -- StepSizeUI:RefreshUI()
+    -- ConditionSelectionUI:RefreshUI()
+    -- ProcedureSelectionUI:RefreshUI()
+    -- TargetTypeUI:RefreshUI()
+    -- StepTransformUI:RefreshUI()
+    -- BlendsRadiusUI:RefreshUI()
+    -- DelayTimeUI:RefreshUI()
+    -- StepNameUI:RefreshUI()
+    -- BlendsEnableUI:RefreshUI()
+
+	-- SpeedMmUI:SetInteractable(false)
+
+    -- SpeedPercUI:SetInteractable(false)
+    -- CollisionMarginUI:SetInteractable(false)
+    -- StepSizeUI:SetInteractable(false)
+    -- TrajectoryMotionTypeUI:SetInteractable(false)
+    -- StepNameUI:SetInteractable(false)
+    -- ToolChoiceUI:SetInteractable(false)
+    -- TcpChoiceUI:SetInteractable(false)
+    -- BlendsEnableUI:SetInteractable(false)
+    -- BlendsRadiusUI:SetInteractable(false)
+    -- DelayTimeUI:SetInteractable(false)
+    --StepsListUI:SetInteractable(false)
+	-- StepTransformUI:SetInteractable(false)
+    -- StepRobotJointUI:SetInteractable(false)
+    -- TargetTypeUI:SetInteractable(false)
+    -- ConditionSelectionUI:SetInteractable(false)
+    -- ProcedureSelectionUI:SetInteractable(false)
+
+
+
+-- end
+
+-- if UiElement.name=="StepListSortOrder" then
+-- for order,obj in pairs(StepsListUI.value)
+-- do
+--     Existing_step_id[order+1] = tonumber(obj[0].name:sub(3,#obj[0].name))
+-- end
+
+-- PTable:set_Item("Existing_step_id",TableSaveToFileformate(Existing_step_id))
+-- Existing_step_number=#Existing_step_id
+
+-- end
+
+-- if UiElement.name=="StepsList" or UiElement.name=="StepName" or UiElement.name=="StepListSortOrder" then
+-- for order,obj in pairs(StepsListUI.value)
+-- do
+--     local temp_step_id = Existing_step_id[order+1]
+--     -- print(temp_step_id)
+--     obj[0].title='#'..(order+1)..' ' .. PTable:get_Item("Text_Input_StepName_values_ID"..temp_step_id)               --Everytime steplist is updated including deleting & adding ,name would be renamed 
+--     obj[0]:RefreshUI()
+-- end
+-- end
+
+-- if UiElement.name=="ToolChoice" or UiElement.name=="TcpChoice" or UiElement.name=="Step_edit" or UiElement.name=="ReassignToolAndTCP" then
+-- StepTransformUI:SetTeachingTool(ToolChoiceUI.dropdownElementList[ToolChoiceUI.value], TcpChoiceUI.dropdownElementList[TcpChoiceUI.value])
+-- end
+
+--///////////////////////////////////////////////////////////////////////////////////////////////////
+
+----------------------------------------------
+
+if UiElement.name == "ReturnButton" then
+    PTable:set_Item("current_step", 0)
+	subPageSwitcherManager:SwitchPage(0)
+end
