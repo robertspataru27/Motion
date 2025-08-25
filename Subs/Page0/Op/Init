@@ -1,4 +1,3 @@
-
 CS.UnityEngine.Debug.Log('Motion > Sub > Page0 > Op > Init triggered')
 
 local PTable = CS.ConfigurationMenu.ConfigurationMenuLuaInterface.Instance.parameterTable

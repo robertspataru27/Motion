@@ -56,7 +56,9 @@
           "value":0,
           "dropdownElementList": [
             "Transform",
-            "Joint"
+            "Joint",
+            "Relative Transform",
+            "Relative Joint"
           ]
           },
           "layoutSetting": null
